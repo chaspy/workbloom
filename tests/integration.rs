@@ -71,11 +71,11 @@ fn test_port_allocation() {
     
     assert_ne!(ports1.frontend, ports2.frontend);
     assert_ne!(ports1.backend, ports2.backend);
-    assert_ne!(ports1.postgres, ports2.postgres);
+    assert_ne!(ports1.database, ports2.database);
     
     assert_eq!(ports1.frontend, ports3.frontend);
     assert_eq!(ports1.backend, ports3.backend);
-    assert_eq!(ports1.postgres, ports3.postgres);
+    assert_eq!(ports1.database, ports3.database);
 }
 
 #[test]

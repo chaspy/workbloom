@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 pub struct PortAllocation {
     pub frontend: u16,
     pub backend: u16,
-    pub postgres: u16,
+    pub database: u16,
 }
 
 pub fn calculate_ports(branch_name: &str) -> PortAllocation {
@@ -17,6 +17,6 @@ pub fn calculate_ports(branch_name: &str) -> PortAllocation {
     PortAllocation {
         frontend: 5173 + num,
         backend: 8080 + num,
-        postgres: 5432 + num,
+        database: 5432 + num,
     }
 }

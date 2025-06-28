@@ -19,7 +19,7 @@ pub fn execute(branch_name: &str) -> Result<()> {
     
     run_cleanup_if_exists(&repo)?;
     
-    let pb = ProgressBar::new(5);
+    let pb = ProgressBar::new(6);
     pb.set_style(
         ProgressStyle::default_bar()
             .template("{spinner:.green} [{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg}")
@@ -53,6 +53,9 @@ pub fn execute(branch_name: &str) -> Result<()> {
     let ports = port::calculate_ports(branch_name);
     pb.inc(1);
     
+    pb.set_message("Updating .env with ports...");
+    file_ops::update_env_with_ports(&worktree_path, &ports)?;
+    
     pb.finish_with_message("Setup completed!");
     
     println!();
@@ -63,7 +66,7 @@ pub fn execute(branch_name: &str) -> Result<()> {
     println!("{} Port allocation for this worktree:", "🌐".blue());
     println!("   Frontend: http://localhost:{}", ports.frontend.to_string().cyan());
     println!("   Backend:  http://localhost:{}", ports.backend.to_string().cyan());
-    println!("   PostgreSQL: localhost:{}", ports.postgres.to_string().cyan());
+    println!("   Database: localhost:{}", ports.database.to_string().cyan());
     println!();
     
     println!("{} Moving to worktree directory...", "📂".blue());

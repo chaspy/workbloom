@@ -64,9 +64,14 @@ By default, Workbloom copies the following files to new worktrees:
 Workbloom automatically allocates unique ports for each worktree based on the branch name:
 - Frontend: 5173 + hash
 - Backend: 8080 + hash
-- PostgreSQL: 5432 + hash
+- Database: 5432 + hash
 
-The same branch name will always get the same ports.
+The same branch name will always get the same ports. These port allocations are automatically written to the `.env` file:
+```
+FRONTEND_PORT=6174
+BACKEND_PORT=9081
+DATABASE_PORT=6433
+```
 
 ## Development
 
