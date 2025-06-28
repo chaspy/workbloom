@@ -18,8 +18,8 @@ enum Commands {
         #[arg(help = "The branch name for the worktree")]
         branch_name: String,
         
-        #[arg(long, help = "Start a new shell in the worktree directory")]
-        shell: bool,
+        #[arg(long, help = "Skip starting a new shell (default is to start shell)")]
+        no_shell: bool,
     },
     
     #[command(about = "Clean up worktrees")]
@@ -44,8 +44,8 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     
     match cli.command {
-        Commands::Setup { branch_name, shell } => {
-            setup::execute(&branch_name, shell)?;
+        Commands::Setup { branch_name, no_shell } => {
+            setup::execute(&branch_name, !no_shell)?;
         }
         Commands::Cleanup {
             merged,

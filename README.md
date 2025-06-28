@@ -46,11 +46,11 @@ workbloom-setup() {
 ### Setup a new worktree
 
 ```bash
-# Basic setup
+# Setup and start a new shell in the worktree directory (default)
 workbloom setup feature/my-new-feature
 
-# Setup and start a new shell in the worktree directory
-workbloom setup feature/my-new-feature --shell
+# Setup without starting a shell
+workbloom setup feature/my-new-feature --no-shell
 ```
 
 This will:
@@ -59,7 +59,7 @@ This will:
 3. Setup direnv if available
 4. Write port allocations to .env file
 5. Display allocated ports for the worktree
-6. (With --shell) Start a new shell in the worktree directory
+6. Start a new shell in the worktree directory (unless --no-shell is used)
 
 ### Clean up worktrees
 
