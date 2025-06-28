@@ -53,7 +53,7 @@ fn main() -> Result<()> {
             interactive,
             status,
         } => {
-            let mode = if merged || (!pattern.is_some() && !interactive && !status) {
+            let mode = if merged || (pattern.is_none() && !interactive && !status) {
                 cleanup::CleanupMode::Merged
             } else if let Some(p) = pattern {
                 cleanup::CleanupMode::Pattern(p)
