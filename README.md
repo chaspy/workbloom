@@ -12,12 +12,20 @@ A Git worktree management tool written in Rust that automates worktree setup, fi
 
 ## Installation
 
+### From crates.io (Recommended)
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/workbloom.git
-cd workbloom
+cargo install workbloom
+```
 
-# Build and install
+### From GitHub
+```bash
+cargo install --git https://github.com/chaspy/workbloom.git
+```
+
+### From source
+```bash
+git clone https://github.com/chaspy/workbloom.git
+cd workbloom
 cargo install --path .
 ```
 
