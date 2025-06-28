@@ -1,5 +1,10 @@
 # Workbloom
 
+[![Build](https://github.com/chaspy/workbloom/actions/workflows/build.yml/badge.svg)](https://github.com/chaspy/workbloom/actions/workflows/build.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=chaspy_workbloom&metric=alert_status)](https://sonarcloud.io/dashboard?id=chaspy_workbloom)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=chaspy_workbloom&metric=coverage)](https://sonarcloud.io/dashboard?id=chaspy_workbloom)
+[![Crates.io](https://img.shields.io/crates/v/workbloom.svg)](https://crates.io/crates/workbloom)
+
 A Git worktree management tool written in Rust that automates worktree setup, file copying, and port allocation.
 
 ## Features

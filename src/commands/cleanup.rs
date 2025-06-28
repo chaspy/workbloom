@@ -34,7 +34,7 @@ pub fn cleanup_merged_worktrees(repo: &GitRepo) -> Result<()> {
     
     println!("Found merged branches:");
     for branch in &merged_branches {
-        println!("  - {}", branch);
+        println!("  - {branch}");
     }
     println!();
     
@@ -73,8 +73,8 @@ pub fn cleanup_merged_worktrees(repo: &GitRepo) -> Result<()> {
     }
     
     println!("{} Summary:", "📊".blue());
-    println!("  - Cleaned up: {} worktree(s)", cleaned_count);
-    println!("  - Skipped: {} worktree(s)", skipped_count);
+    println!("  - Cleaned up: {cleaned_count} worktree(s)");
+    println!("  - Skipped: {skipped_count} worktree(s)");
     
     if cleaned_count == 0 {
         println!();

@@ -14,7 +14,7 @@ impl GitRepo {
 
     pub fn branch_exists(&self, branch_name: &str) -> Result<bool> {
         let output = Command::new("git")
-            .args(&["show-ref", "--verify", "--quiet", &format!("refs/heads/{}", branch_name)])
+            .args(["show-ref", "--verify", "--quiet", &format!("refs/heads/{branch_name}")])
             .current_dir(&self.root_dir)
             .output()
             .context("Failed to check if branch exists")?;
@@ -24,13 +24,13 @@ impl GitRepo {
 
     pub fn create_branch(&self, branch_name: &str) -> Result<()> {
         Command::new("git")
-            .args(&["checkout", "-b", branch_name])
+            .args(["checkout", "-b", branch_name])
             .current_dir(&self.root_dir)
             .output()
             .context("Failed to create branch")?;
         
         Command::new("git")
-            .args(&["checkout", "-"])
+            .args(["checkout", "-"])
             .current_dir(&self.root_dir)
             .output()
             .context("Failed to switch back to previous branch")?;
@@ -40,7 +40,7 @@ impl GitRepo {
 
     pub fn add_worktree(&self, worktree_path: &Path, branch_name: &str) -> Result<()> {
         Command::new("git")
-            .args(&["worktree", "add", worktree_path.to_str().unwrap(), branch_name])
+            .args(["worktree", "add", worktree_path.to_str().unwrap(), branch_name])
             .current_dir(&self.root_dir)
             .status()
             .context("Failed to create worktree")?;
@@ -50,7 +50,7 @@ impl GitRepo {
 
     pub fn list_worktrees(&self) -> Result<Vec<WorktreeInfo>> {
         let output = Command::new("git")
-            .args(&["worktree", "list", "--porcelain"])
+            .args(["worktree", "list", "--porcelain"])
             .current_dir(&self.root_dir)
             .output()
             .context("Failed to list worktrees")?;
@@ -61,7 +61,7 @@ impl GitRepo {
 
     pub fn get_merged_branches(&self) -> Result<Vec<String>> {
         let output = Command::new("git")
-            .args(&["branch", "--merged", "main"])
+            .args(["branch", "--merged", "main"])
             .current_dir(&self.root_dir)
             .output()
             .context("Failed to get merged branches")?;
@@ -94,7 +94,7 @@ impl GitRepo {
 
     pub fn delete_branch(&self, branch_name: &str) -> Result<()> {
         Command::new("git")
-            .args(&["branch", "-D", branch_name])
+            .args(["branch", "-D", branch_name])
             .current_dir(&self.root_dir)
             .output()
             .context("Failed to delete branch")?;
@@ -104,7 +104,7 @@ impl GitRepo {
 
     pub fn is_branch_merged(&self, branch_name: &str) -> Result<bool> {
         let output = Command::new("git")
-            .args(&["merge-base", "--is-ancestor", branch_name, "main"])
+            .args(["merge-base", "--is-ancestor", branch_name, "main"])
             .current_dir(&self.root_dir)
             .output()
             .context("Failed to check if branch is merged")?;
@@ -114,7 +114,7 @@ impl GitRepo {
 
     pub fn get_current_branch(&self, worktree_path: &Path) -> Result<String> {
         let output = Command::new("git")
-            .args(&["rev-parse", "--abbrev-ref", "HEAD"])
+            .args(["rev-parse", "--abbrev-ref", "HEAD"])
             .current_dir(worktree_path)
             .output()
             .context("Failed to get current branch")?;
@@ -132,7 +132,7 @@ pub struct WorktreeInfo {
 
 fn get_main_repo_dir() -> Result<PathBuf> {
     let output = Command::new("git")
-        .args(&["worktree", "list"])
+        .args(["worktree", "list"])
         .output()
         .context("Failed to get worktree list")?;
     
@@ -146,7 +146,7 @@ fn get_main_repo_dir() -> Result<PathBuf> {
     }
     
     let output = Command::new("git")
-        .args(&["rev-parse", "--show-toplevel"])
+        .args(["rev-parse", "--show-toplevel"])
         .output()
         .context("Failed to get git root directory")?;
     

@@ -15,7 +15,7 @@ fn test_help_command() {
 fn test_setup_help_command() {
     Command::cargo_bin("workbloom")
         .unwrap()
-        .args(&["setup", "--help"])
+        .args(["setup", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Set up a new git worktree"));
@@ -25,7 +25,7 @@ fn test_setup_help_command() {
 fn test_cleanup_help_command() {
     Command::cargo_bin("workbloom")
         .unwrap()
-        .args(&["cleanup", "--help"])
+        .args(["cleanup", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Clean up worktrees"));
@@ -55,7 +55,7 @@ fn test_setup_without_branch_name() {
 fn test_cleanup_conflicting_options() {
     Command::cargo_bin("workbloom")
         .unwrap()
-        .args(&["cleanup", "--merged", "--pattern", "test"])
+        .args(["cleanup", "--merged", "--pattern", "test"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("cannot be used with"));

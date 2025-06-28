@@ -78,7 +78,7 @@ pub fn execute(branch_name: &str, start_shell: bool) -> Result<()> {
         println!("{} Moving to worktree directory...", "📂".blue());
         println!("cd {}", worktree_path.display());
         println!();
-        println!("💡 Tip: Default behavior now starts a shell. Use 'workbloom setup {} --no-shell' to skip", branch_name);
+        println!("💡 Tip: Default behavior now starts a shell. Use 'workbloom setup {branch_name} --no-shell' to skip");
     }
     
     Ok(())

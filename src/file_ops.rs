@@ -33,7 +33,7 @@ fn copy_item(main_dir: &Path, worktree_dir: &Path, item: &str) -> Result<()> {
     
     if let Some(parent) = dest_path.parent() {
         fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create parent directory for {}", item))?;
+            .with_context(|| format!("Failed to create parent directory for {item}"))?;
     }
     
     if source_path.is_dir() {
@@ -41,7 +41,7 @@ fn copy_item(main_dir: &Path, worktree_dir: &Path, item: &str) -> Result<()> {
         println!("{} Copied directory: {}", "📁".green(), item);
     } else {
         fs::copy(&source_path, &dest_path)
-            .with_context(|| format!("Failed to copy {}", item))?;
+            .with_context(|| format!("Failed to copy {item}"))?;
         println!("{} Copied file: {}", "📄".green(), item);
     }
     
@@ -65,7 +65,7 @@ fn copy_claude_settings(main_dir: &Path, worktree_dir: &Path, config: &Config) -
         if source_file.exists() {
             let dest_file = claude_dest.join(file);
             fs::copy(&source_file, &dest_file)
-                .with_context(|| format!("Failed to copy .claude/{}", file))?;
+                .with_context(|| format!("Failed to copy .claude/{file}"))?;
             println!("{} Copied file: .claude/{}", "📄".green(), file);
         }
     }
@@ -164,7 +164,7 @@ pub fn update_env_with_ports(worktree_dir: &Path, ports: &PortAllocation) -> Res
         if i > 0 {
             writeln!(file)?;
         }
-        write!(file, "{}", line)?;
+        write!(file, "{line}")?;
     }
     
     // Ensure file ends with newline
