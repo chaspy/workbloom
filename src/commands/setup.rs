@@ -1,11 +1,13 @@
 use anyhow::{Context, Result};
 use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
+use std::env;
+use std::process::Command;
 use std::time::Duration;
 
 use crate::{config::Config, file_ops, git::GitRepo, port};
 
-pub fn execute(branch_name: &str) -> Result<()> {
+pub fn execute(branch_name: &str, start_shell: bool) -> Result<()> {
     let repo = GitRepo::new()?;
     let config = Config::default();
     
@@ -69,8 +71,15 @@ pub fn execute(branch_name: &str) -> Result<()> {
     println!("   Database: localhost:{}", ports.database.to_string().cyan());
     println!();
     
-    println!("{} Moving to worktree directory...", "📂".blue());
-    println!("cd {}", worktree_path.display());
+    if start_shell {
+        println!("{} Starting new shell in worktree directory...", "📂".blue());
+        start_shell_in_directory(&worktree_path)?;
+    } else {
+        println!("{} Moving to worktree directory...", "📂".blue());
+        println!("cd {}", worktree_path.display());
+        println!();
+        println!("💡 Tip: Use 'workbloom setup {} --shell' to automatically start a shell in the worktree", branch_name);
+    }
     
     Ok(())
 }
@@ -90,5 +99,16 @@ fn run_cleanup_if_exists(repo: &GitRepo) -> Result<()> {
     }
     
     println!();
+    Ok(())
+}
+
+fn start_shell_in_directory(worktree_path: &std::path::Path) -> Result<()> {
+    let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+    
+    Command::new(&shell)
+        .current_dir(worktree_path)
+        .status()
+        .context("Failed to start shell in worktree directory")?;
+    
     Ok(())
 }

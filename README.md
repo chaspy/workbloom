@@ -21,19 +21,45 @@ cd workbloom
 cargo install --path .
 ```
 
+### Shell Integration (Recommended)
+
+To automatically change to the worktree directory after setup, add this function to your `.bashrc` or `.zshrc`:
+
+```bash
+workbloom-setup() {
+    local output=$(workbloom setup "$@")
+    echo "$output"
+    
+    # Extract the worktree path and change to it
+    local worktree_path=$(echo "$output" | grep "📍 Worktree location:" | sed 's/.*: //')
+    if [ -n "$worktree_path" ] && [ -d "$worktree_path" ]; then
+        cd "$worktree_path"
+        echo "📂 Changed to worktree directory: $(pwd)"
+    fi
+}
+
+# Then use: workbloom-setup feature/my-feature
+```
+
 ## Usage
 
 ### Setup a new worktree
 
 ```bash
+# Basic setup
 workbloom setup feature/my-new-feature
+
+# Setup and start a new shell in the worktree directory
+workbloom setup feature/my-new-feature --shell
 ```
 
 This will:
 1. Create a new worktree for the branch (creating the branch if it doesn't exist)
 2. Copy required files from the main repository (.env, .envrc, etc.)
 3. Setup direnv if available
-4. Display allocated ports for the worktree
+4. Write port allocations to .env file
+5. Display allocated ports for the worktree
+6. (With --shell) Start a new shell in the worktree directory
 
 ### Clean up worktrees
 
