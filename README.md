@@ -56,7 +56,6 @@ workbloom cleanup --status
 By default, Workbloom copies the following files to new worktrees:
 - `.envrc`
 - `.env`
-- `backend/service-account.json`
 - `.claude/settings.json`
 - `.claude/settings.local.json`
 

@@ -14,9 +14,7 @@ impl Default for Config {
                 ".envrc".to_string(),
                 ".env".to_string(),
             ],
-            directories_to_copy: vec![
-                "backend/service-account.json".to_string(),
-            ],
+            directories_to_copy: vec![],
             claude_files: vec![
                 "settings.json".to_string(),
                 "settings.local.json".to_string(),

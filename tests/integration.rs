@@ -85,7 +85,7 @@ fn test_config_defaults() {
     let config = Config::default();
     assert!(config.files_to_copy.contains(&".envrc".to_string()));
     assert!(config.files_to_copy.contains(&".env".to_string()));
-    assert!(config.directories_to_copy.contains(&"backend/service-account.json".to_string()));
+    assert!(config.directories_to_copy.is_empty());
     assert!(config.claude_files.contains(&"settings.json".to_string()));
     assert!(config.claude_files.contains(&"settings.local.json".to_string()));
 }
