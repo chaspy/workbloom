@@ -2,10 +2,16 @@
 name = "workbloom"
 version = "0.1.0"
 edition = "2021"
-authors = ["Your Name <you@example.com>"]
-description = "A Git worktree management tool"
+authors = ["chaspy <chaspy+git@gmail.com>"]
+description = "A Git worktree management tool with automatic file copying and port allocation"
 license = "MIT"
-repository = "https://github.com/yourusername/workbloom"
+repository = "https://github.com/chaspy/workbloom"
+homepage = "https://github.com/chaspy/workbloom"
+documentation = "https://github.com/chaspy/workbloom"
+keywords = ["git", "worktree", "cli", "development", "workflow"]
+categories = ["command-line-utilities", "development-tools"]
+readme = "README.md"
+exclude = ["worktree-*"]
 
 [dependencies]
 clap = { version = "4.5", features = ["derive", "cargo"] }
