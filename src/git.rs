@@ -111,6 +111,20 @@ impl GitRepo {
         
         Ok(output.status.success())
     }
+    
+    pub fn has_unmerged_commits(&self, branch_name: &str) -> Result<bool> {
+        // Check if branch has commits that are not in main
+        let output = Command::new("git")
+            .args(["rev-list", "--count", &format!("main..{branch_name}")])
+            .current_dir(&self.root_dir)
+            .output()
+            .context("Failed to count unmerged commits")?;
+        
+        let count_str = String::from_utf8_lossy(&output.stdout);
+        let count = count_str.trim().parse::<i32>().unwrap_or(0);
+        
+        Ok(count > 0)
+    }
 
     pub fn get_current_branch(&self, worktree_path: &Path) -> Result<String> {
         let output = Command::new("git")
@@ -187,4 +201,102 @@ fn parse_worktree_list(output: &str) -> Result<Vec<WorktreeInfo>> {
     }
     
     Ok(worktrees)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::Command;
+    use tempfile::TempDir;
+
+    fn setup_test_repo() -> Result<(TempDir, GitRepo)> {
+        let temp_dir = TempDir::new()?;
+        let repo_path = temp_dir.path();
+        
+        // Initialize a git repo
+        Command::new("git")
+            .args(["init"])
+            .current_dir(repo_path)
+            .output()?;
+        
+        // Set git config to avoid errors
+        Command::new("git")
+            .args(["config", "user.email", "test@example.com"])
+            .current_dir(repo_path)
+            .output()?;
+        
+        Command::new("git")
+            .args(["config", "user.name", "Test User"])
+            .current_dir(repo_path)
+            .output()?;
+        
+        // Create initial commit
+        Command::new("git")
+            .args(["commit", "--allow-empty", "-m", "Initial commit"])
+            .current_dir(repo_path)
+            .output()?;
+        
+        // Rename to main if needed
+        Command::new("git")
+            .args(["branch", "-M", "main"])
+            .current_dir(repo_path)
+            .output()?;
+        
+        let repo = GitRepo {
+            root_dir: repo_path.to_path_buf(),
+        };
+        
+        Ok((temp_dir, repo))
+    }
+
+    #[test]
+    fn test_has_unmerged_commits_with_new_branch() -> Result<()> {
+        let (_temp_dir, repo) = setup_test_repo()?;
+        
+        // Create a new branch
+        repo.create_branch("test-branch")?;
+        
+        // A new branch without commits should not have unmerged commits
+        assert!(!repo.has_unmerged_commits("test-branch")?);
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_branch_exists() -> Result<()> {
+        let (_temp_dir, repo) = setup_test_repo()?;
+        
+        // Main branch should exist
+        assert!(repo.branch_exists("main")?);
+        
+        // Non-existent branch should not exist
+        assert!(!repo.branch_exists("non-existent-branch")?);
+        
+        // Create a branch and check it exists
+        repo.create_branch("test-branch")?;
+        assert!(repo.branch_exists("test-branch")?);
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_merged_branches() -> Result<()> {
+        let (_temp_dir, repo) = setup_test_repo()?;
+        
+        // Create and immediately check merged branches
+        repo.create_branch("feature-branch")?;
+        
+        // Switch back to main
+        Command::new("git")
+            .args(["checkout", "main"])
+            .current_dir(&repo.root_dir)
+            .output()?;
+        
+        let merged = repo.get_merged_branches()?;
+        
+        // A branch created from main with no new commits should appear as merged
+        assert!(merged.contains(&"feature-branch".to_string()));
+        
+        Ok(())
+    }
 }
