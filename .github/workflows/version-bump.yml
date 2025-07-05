@@ -1,0 +1,70 @@
+name: Version Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Install cargo-edit
+        run: cargo install cargo-edit
+      
+      - name: Get current version
+        id: current_version
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Bump version
+        run: |
+          case "${{ github.event.inputs.version_type }}" in
+            patch)
+              cargo set-version --bump patch
+              ;;
+            minor)
+              cargo set-version --bump minor
+              ;;
+            major)
+              cargo set-version --bump major
+              ;;
+          esac
+      
+      - name: Get new version
+        id: new_version
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Update Cargo.lock
+        run: cargo update --workspace
+      
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: bump version to ${{ steps.new_version.outputs.VERSION }}"
+          title: "chore: bump version to ${{ steps.new_version.outputs.VERSION }}"
+          body: |
+            Bumps version from ${{ steps.current_version.outputs.VERSION }} to ${{ steps.new_version.outputs.VERSION }}
+            
+            This is an automated PR created by the version bump workflow.
+          branch: version-bump-${{ steps.new_version.outputs.VERSION }}
+          delete-branch: true
