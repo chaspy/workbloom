@@ -1,6 +1,6 @@
 [package]
 name = "workbloom"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 authors = ["chaspy <chaspy+git@gmail.com>"]
 description = "A Git worktree management tool with automatic file copying and port allocation"
