@@ -24,7 +24,7 @@ jobs:
       
       - name: Create Release
         id: create_release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref }}
           name: Release v${{ steps.get_version.outputs.VERSION }}
@@ -73,7 +73,7 @@ jobs:
           mv ${{ matrix.asset_name }}.tar.gz ../../../
       
       - name: Upload Release Asset
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref }}
           files: ./${{ matrix.asset_name }}.tar.gz
