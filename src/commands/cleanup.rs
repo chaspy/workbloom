@@ -29,27 +29,44 @@ pub fn cleanup_merged_worktrees(repo: &GitRepo) -> Result<()> {
 pub fn cleanup_merged_worktrees_with_exclude(repo: &GitRepo, exclude_branch: Option<&str>) -> Result<()> {
     println!("{} Cleaning up worktrees for merged branches...", "🧹".yellow());
     
-    let mut merged_branches = repo.get_merged_branches()?;
-    
-    // Remove the excluded branch from the list
-    if let Some(exclude) = exclude_branch {
-        merged_branches.retain(|branch| branch != exclude);
-    }
+    let merged_branches = get_filtered_merged_branches(repo, exclude_branch)?;
     
     if merged_branches.is_empty() {
         println!("{} No merged branches found", "✨".green());
         return Ok(());
     }
     
+    display_merged_branches(&merged_branches, exclude_branch);
+    
+    let (cleaned_count, skipped_count) = process_worktrees(repo, &merged_branches)?;
+    
+    display_cleanup_summary(cleaned_count, skipped_count);
+    
+    Ok(())
+}
+
+fn get_filtered_merged_branches(repo: &GitRepo, exclude_branch: Option<&str>) -> Result<Vec<String>> {
+    let mut merged_branches = repo.get_merged_branches()?;
+    
+    if let Some(exclude) = exclude_branch {
+        merged_branches.retain(|branch| branch != exclude);
+    }
+    
+    Ok(merged_branches)
+}
+
+fn display_merged_branches(merged_branches: &[String], exclude_branch: Option<&str>) {
     println!("Found merged branches:");
-    for branch in &merged_branches {
+    for branch in merged_branches {
         println!("  - {branch}");
     }
     if let Some(exclude) = exclude_branch {
         println!("  (excluding: {})", exclude.cyan());
     }
     println!();
-    
+}
+
+fn process_worktrees(repo: &GitRepo, merged_branches: &[String]) -> Result<(usize, usize)> {
     let worktrees = repo.list_worktrees()?;
     let mut cleaned_count = 0;
     let mut skipped_count = 0;
@@ -60,47 +77,75 @@ pub fn cleanup_merged_worktrees_with_exclude(repo: &GitRepo, exclude_branch: Opt
         }
         
         if let Some(branch) = &worktree.branch {
-            if worktree.is_detached {
-                println!("{} Skipping detached HEAD worktree: {}", "⚠️".yellow(), worktree.path.display());
-                skipped_count += 1;
-                continue;
-            }
-            
-            if merged_branches.contains(branch) {
-                // Check if branch has unmerged commits
-                match repo.has_unmerged_commits(branch) {
-                    Ok(true) => {
-                        println!("{} Skipping branch with unmerged commits: {}", "⚠️".yellow(), branch);
-                        skipped_count += 1;
-                        continue;
-                    }
-                    Err(e) => {
-                        println!("{} Could not check unmerged commits for {}: {}", "⚠️".yellow(), branch, e);
-                        skipped_count += 1;
-                        continue;
-                    }
-                    Ok(false) => {
-                        // Proceed with removal
-                    }
-                }
-                
-                println!("{} Removing worktree for merged branch: {}", "🗑️".red(), branch);
-                println!("    Path: {}", worktree.path.display());
-                
-                match repo.remove_worktree(&worktree.path, true) {
-                    Ok(_) => {
-                        println!("    {} Successfully removed", "✅".green());
-                        cleaned_count += 1;
-                    }
-                    Err(e) => {
-                        println!("    {} Failed to remove: {}", "❌".red(), e);
-                        skipped_count += 1;
-                    }
-                }
+            match process_single_worktree(repo, worktree, branch, merged_branches) {
+                WorktreeAction::Removed => cleaned_count += 1,
+                WorktreeAction::Skipped => skipped_count += 1,
+                WorktreeAction::Ignored => {}
             }
         }
     }
     
+    Ok((cleaned_count, skipped_count))
+}
+
+enum WorktreeAction {
+    Removed,
+    Skipped,
+    Ignored,
+}
+
+fn process_single_worktree(
+    repo: &GitRepo,
+    worktree: &crate::git::WorktreeInfo,
+    branch: &str,
+    merged_branches: &[String],
+) -> WorktreeAction {
+    if worktree.is_detached {
+        println!("{} Skipping detached HEAD worktree: {}", "⚠️".yellow(), worktree.path.display());
+        return WorktreeAction::Skipped;
+    }
+    
+    if !merged_branches.contains(&branch.to_string()) {
+        return WorktreeAction::Ignored;
+    }
+    
+    // Check if branch has unmerged commits
+    match repo.has_unmerged_commits(branch) {
+        Ok(true) => {
+            println!("{} Skipping branch with unmerged commits: {}", "⚠️".yellow(), branch);
+            WorktreeAction::Skipped
+        }
+        Err(e) => {
+            println!("{} Could not check unmerged commits for {}: {}", "⚠️".yellow(), branch, e);
+            WorktreeAction::Skipped
+        }
+        Ok(false) => {
+            remove_worktree_and_report(repo, worktree, branch)
+        }
+    }
+}
+
+fn remove_worktree_and_report(
+    repo: &GitRepo,
+    worktree: &crate::git::WorktreeInfo,
+    branch: &str,
+) -> WorktreeAction {
+    println!("{} Removing worktree for merged branch: {}", "🗑️".red(), branch);
+    println!("    Path: {}", worktree.path.display());
+    
+    match repo.remove_worktree(&worktree.path, true) {
+        Ok(_) => {
+            println!("    {} Successfully removed", "✅".green());
+            WorktreeAction::Removed
+        }
+        Err(e) => {
+            println!("    {} Failed to remove: {}", "❌".red(), e);
+            WorktreeAction::Skipped
+        }
+    }
+}
+
+fn display_cleanup_summary(cleaned_count: usize, skipped_count: usize) {
     println!();
     println!("{} Summary:", "📊".blue());
     println!("  - Cleaned up: {cleaned_count} worktree(s)");
@@ -113,8 +158,6 @@ pub fn cleanup_merged_worktrees_with_exclude(repo: &GitRepo, exclude_branch: Opt
         println!();
         println!("{} Cleanup completed!", "✅".green().bold());
     }
-    
-    Ok(())
 }
 
 fn cleanup_merged_only(repo: &GitRepo) -> Result<()> {
