@@ -115,7 +115,7 @@ impl GitRepo {
     pub fn has_unmerged_commits(&self, branch_name: &str) -> Result<bool> {
         // Check if branch has commits that are not in main
         let output = Command::new("git")
-            .args(["rev-list", "--count", &format!("main..{}", branch_name)])
+            .args(["rev-list", "--count", &format!("main..{branch_name}")])
             .current_dir(&self.root_dir)
             .output()
             .context("Failed to count unmerged commits")?;

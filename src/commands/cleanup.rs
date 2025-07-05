@@ -181,8 +181,8 @@ pub fn cleanup_merged_worktrees_with_exclude(repo: &GitRepo, exclude_branch: Opt
     
     println!();
     println!("{} Summary:", "📊".blue());
-    println!("  - Cleaned up: {} worktree(s)", cleaned_count);
-    println!("  - Skipped: {} worktree(s)", skipped_count);
+    println!("  - Cleaned up: {cleaned_count} worktree(s)");
+    println!("  - Skipped: {skipped_count} worktree(s)");
     
     if cleaned_count == 0 && skipped_count == 0 {
         println!();
