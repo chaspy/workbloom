@@ -20,7 +20,7 @@ pub fn execute(branch_name: &str, start_shell: bool) -> Result<()> {
     println!("Worktree directory: {}", worktree_path.display());
     println!();
     
-    run_cleanup_if_exists(&repo)?;
+    run_cleanup_if_exists(&repo, Some(branch_name))?;
     
     let pb = ProgressBar::new(6);
     pb.set_style(
@@ -85,7 +85,7 @@ pub fn execute(branch_name: &str, start_shell: bool) -> Result<()> {
     Ok(())
 }
 
-fn run_cleanup_if_exists(repo: &GitRepo) -> Result<()> {
+fn run_cleanup_if_exists(repo: &GitRepo, exclude_branch: Option<&str>) -> Result<()> {
     println!("{} Checking for merged branch worktrees to clean up...", "🧹".yellow());
     
     let script_path = repo.root_dir.join("scripts/cleanup-merged-worktrees.sh");
@@ -96,7 +96,7 @@ fn run_cleanup_if_exists(repo: &GitRepo) -> Result<()> {
             .status()
             .context("Failed to run cleanup script")?;
     } else {
-        crate::commands::cleanup::cleanup_merged_worktrees(repo)?;
+        crate::commands::cleanup::cleanup_merged_worktrees_with_exclude(repo, exclude_branch)?;
     }
     
     println!();

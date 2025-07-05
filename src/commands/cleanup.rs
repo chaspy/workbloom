@@ -55,6 +55,23 @@ pub fn cleanup_merged_worktrees(repo: &GitRepo) -> Result<()> {
             }
             
             if merged_branches.contains(branch) {
+                // Check if branch has unmerged commits
+                match repo.has_unmerged_commits(branch) {
+                    Ok(true) => {
+                        println!("{} Skipping branch with unmerged commits: {}", "⚠️".yellow(), branch);
+                        skipped_count += 1;
+                        continue;
+                    }
+                    Err(e) => {
+                        println!("{} Could not check unmerged commits for {}: {}", "⚠️".yellow(), branch, e);
+                        skipped_count += 1;
+                        continue;
+                    }
+                    Ok(false) => {
+                        // Proceed with removal
+                    }
+                }
+                
                 println!("{} Removing worktree for merged branch: {}", "🗑️".red(), branch);
                 println!("    Path: {}", worktree.path.display());
                 
@@ -77,6 +94,97 @@ pub fn cleanup_merged_worktrees(repo: &GitRepo) -> Result<()> {
     println!("  - Skipped: {skipped_count} worktree(s)");
     
     if cleaned_count == 0 {
+        println!();
+        println!("{} No merged branch worktrees found to clean up", "✨".green());
+    } else {
+        println!();
+        println!("{} Cleanup completed!", "✅".green().bold());
+    }
+    
+    Ok(())
+}
+
+pub fn cleanup_merged_worktrees_with_exclude(repo: &GitRepo, exclude_branch: Option<&str>) -> Result<()> {
+    println!("{} Cleaning up worktrees for merged branches...", "🧹".yellow());
+    
+    let mut merged_branches = repo.get_merged_branches()?;
+    
+    // Remove the excluded branch from the list
+    if let Some(exclude) = exclude_branch {
+        merged_branches.retain(|branch| branch != exclude);
+    }
+    
+    if merged_branches.is_empty() {
+        println!("{} No merged branches found", "✨".green());
+        return Ok(());
+    }
+    
+    println!("Found merged branches:");
+    for branch in &merged_branches {
+        println!("  - {branch}");
+    }
+    if let Some(exclude) = exclude_branch {
+        println!("  (excluding: {})", exclude.cyan());
+    }
+    println!();
+    
+    let worktrees = repo.list_worktrees()?;
+    let mut cleaned_count = 0;
+    let mut skipped_count = 0;
+    
+    for worktree in &worktrees {
+        if worktree.path == repo.root_dir {
+            continue;
+        }
+        
+        if let Some(branch) = &worktree.branch {
+            if worktree.is_detached {
+                println!("{} Skipping detached HEAD worktree: {}", "⚠️".yellow(), worktree.path.display());
+                skipped_count += 1;
+                continue;
+            }
+            
+            if merged_branches.contains(branch) {
+                // Check if branch has unmerged commits
+                match repo.has_unmerged_commits(branch) {
+                    Ok(true) => {
+                        println!("{} Skipping branch with unmerged commits: {}", "⚠️".yellow(), branch);
+                        skipped_count += 1;
+                        continue;
+                    }
+                    Err(e) => {
+                        println!("{} Could not check unmerged commits for {}: {}", "⚠️".yellow(), branch, e);
+                        skipped_count += 1;
+                        continue;
+                    }
+                    Ok(false) => {
+                        // Proceed with removal
+                    }
+                }
+                
+                println!("{} Removing worktree for merged branch: {}", "🗑️".red(), branch);
+                println!("    Path: {}", worktree.path.display());
+                
+                match repo.remove_worktree(&worktree.path, true) {
+                    Ok(_) => {
+                        println!("    {} Successfully removed", "✅".green());
+                        cleaned_count += 1;
+                    }
+                    Err(e) => {
+                        println!("    {} Failed to remove: {}", "❌".red(), e);
+                        skipped_count += 1;
+                    }
+                }
+            }
+        }
+    }
+    
+    println!();
+    println!("{} Summary:", "📊".blue());
+    println!("  - Cleaned up: {} worktree(s)", cleaned_count);
+    println!("  - Skipped: {} worktree(s)", skipped_count);
+    
+    if cleaned_count == 0 && skipped_count == 0 {
         println!();
         println!("{} No merged branch worktrees found to clean up", "✨".green());
     } else {

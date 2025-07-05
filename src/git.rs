@@ -111,6 +111,20 @@ impl GitRepo {
         
         Ok(output.status.success())
     }
+    
+    pub fn has_unmerged_commits(&self, branch_name: &str) -> Result<bool> {
+        // Check if branch has commits that are not in main
+        let output = Command::new("git")
+            .args(["rev-list", "--count", &format!("main..{}", branch_name)])
+            .current_dir(&self.root_dir)
+            .output()
+            .context("Failed to count unmerged commits")?;
+        
+        let count_str = String::from_utf8_lossy(&output.stdout);
+        let count = count_str.trim().parse::<i32>().unwrap_or(0);
+        
+        Ok(count > 0)
+    }
 
     pub fn get_current_branch(&self, worktree_path: &Path) -> Result<String> {
         let output = Command::new("git")
