@@ -55,10 +55,7 @@ fn get_filtered_merged_branches(repo: &GitRepo, exclude_branch: Option<&str>) ->
     // Filter out branches that have no unique commits (newly created branches)
     // These appear as "merged" but are actually just new branches without any work
     merged_branches.retain(|branch| {
-        match repo.has_unmerged_commits(branch) {
-            Ok(has_commits) => has_commits, // Keep only branches that have unique commits
-            Err(_) => true, // Keep branch if we can't determine (error case)
-        }
+        repo.has_unmerged_commits(branch).unwrap_or(true)
     });
     
     Ok(merged_branches)
