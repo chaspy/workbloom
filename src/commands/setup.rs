@@ -9,7 +9,8 @@ use crate::{config::Config, file_ops, git::GitRepo, port};
 
 pub fn execute(branch_name: &str, start_shell: bool) -> Result<()> {
     let repo = GitRepo::new()?;
-    let config = Config::default();
+    let config = Config::load_from_file(&repo.root_dir)
+        .unwrap_or_else(|_| Config::default());
     
     let worktree_dir_name = format!("worktree-{}", branch_name.replace('/', "-"));
     let worktree_path = repo.root_dir.join(&worktree_dir_name);
