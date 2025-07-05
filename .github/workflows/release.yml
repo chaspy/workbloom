@@ -35,6 +35,8 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          # Allow updating existing releases
+          allowUpdates: true
 
   build-and-upload:
     name: Build and Upload
