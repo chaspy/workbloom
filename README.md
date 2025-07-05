@@ -92,11 +92,32 @@ workbloom cleanup --status
 
 ## Configuration
 
+### Default Files
+
 By default, Workbloom copies the following files to new worktrees:
 - `.envrc`
 - `.env`
 - `.claude/settings.json`
 - `.claude/settings.local.json`
+
+### Custom File Copying
+
+You can specify additional files and directories to copy by creating a `.workbloom` file in your repository root:
+
+```bash
+# .workbloom - List of files and directories to copy to git worktrees
+# One file or directory per line
+# Lines starting with # are comments
+# Directories should end with /
+
+# Example:
+service-account.json
+config/database.yml
+.secret/credentials.json
+certificates/
+```
+
+See `.workbloom.example` for a complete example.
 
 ## Port Allocation
 

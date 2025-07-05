@@ -1,0 +1,30 @@
+# .workbloom - List of files and directories to copy to git worktrees
+# 
+# Format:
+# - One file or directory per line
+# - Lines starting with # are comments
+# - Empty lines are ignored
+# - Directories should end with /
+#
+# Example:
+
+# Environment and configuration files
+.envrc
+.env
+.env.local
+
+# Service account and credentials
+service-account.json
+.secret/credentials.json
+
+# Configuration files
+config/database.yml
+config/application.yml
+
+# Directories (end with /)
+certificates/
+.docker/config/
+
+# Claude AI settings (already copied by default, but can be specified here too)
+.claude/settings.json
+.claude/settings.local.json

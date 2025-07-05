@@ -1,0 +1,18 @@
+# workbloom configuration file
+# Files and directories to copy to git worktrees
+
+# Rust development files
+Cargo.lock
+rust-toolchain.toml
+.cargo/config.toml
+
+# CI/CD configurations
+.github/workflows/
+
+# Development tools configuration
+.vscode/settings.json
+rustfmt.toml
+clippy.toml
+
+# Documentation
+docs/
