@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., v0.1.5)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -17,12 +23,25 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       upload_url: ${{ steps.get_release.outputs.upload_url || steps.create_release.outputs.upload_url }}
+      tag: ${{ steps.get_version.outputs.TAG }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
       
       - name: Get version from tag
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger - use input tag
+            VERSION="${{ github.event.inputs.tag }}"
+            VERSION="${VERSION#v}"  # Remove 'v' prefix if present
+          else
+            # Tag push trigger
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "TAG=v$VERSION" >> $GITHUB_OUTPUT
       
       - name: Check if release exists
         id: get_release
@@ -30,7 +49,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
-          tag: ${{ github.ref_name }}
+          tag: ${{ steps.get_version.outputs.TAG }}
         continue-on-error: true
       
       - name: Create Release
@@ -38,7 +57,7 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref }}
+          tag_name: ${{ steps.get_version.outputs.TAG }}
           name: Release v${{ steps.get_version.outputs.VERSION }}
           body: |
             ## Changes in v${{ steps.get_version.outputs.VERSION }}
@@ -69,6 +88,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
       
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -87,7 +108,7 @@ jobs:
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref }}
+          tag_name: ${{ needs.create-release.outputs.tag }}
           files: ./${{ matrix.asset_name }}.tar.gz
           fail_on_unmatched_files: false
 
@@ -97,6 +118,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
       
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
