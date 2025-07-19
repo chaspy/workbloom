@@ -135,6 +135,41 @@ impl GitRepo {
         
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
+    
+    pub fn was_branch_merged_to_main(&self, branch_name: &str) -> Result<bool> {
+        // Get the current HEAD commit of the branch
+        let branch_head_output = Command::new("git")
+            .args(["rev-parse", branch_name])
+            .current_dir(&self.root_dir)
+            .output()
+            .context("Failed to get branch HEAD")?;
+        
+        let branch_head = String::from_utf8_lossy(&branch_head_output.stdout).trim().to_string();
+        
+        // Check if any merge commit in main has the branch HEAD as a parent
+        let merge_commits_output = Command::new("git")
+            .args([
+                "log",
+                "--merges",
+                "--format=%H %P",
+                "main"
+            ])
+            .current_dir(&self.root_dir)
+            .output()
+            .context("Failed to check merge commits")?;
+        
+        let merge_commits = String::from_utf8_lossy(&merge_commits_output.stdout);
+        
+        // Check if any merge commit has our branch HEAD as a parent
+        for line in merge_commits.lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 && parts[1..].contains(&branch_head.as_str()) {
+                return Ok(true);
+            }
+        }
+        
+        Ok(false)
+    }
 }
 
 #[derive(Debug, Clone)]

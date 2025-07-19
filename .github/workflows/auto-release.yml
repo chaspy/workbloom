@@ -1,0 +1,71 @@
+name: Auto Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Cargo.toml'
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-tag:
+    name: Check Version and Create Tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for tags
+      
+      - name: Get version from Cargo.toml
+        id: cargo_version
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version found: $VERSION"
+      
+      - name: Check if tag exists
+        id: tag_exists
+        run: |
+          if git rev-parse "v${{ steps.cargo_version.outputs.VERSION }}" >/dev/null 2>&1; then
+            echo "EXISTS=true" >> $GITHUB_OUTPUT
+            echo "Tag v${{ steps.cargo_version.outputs.VERSION }} already exists"
+          else
+            echo "EXISTS=false" >> $GITHUB_OUTPUT
+            echo "Tag v${{ steps.cargo_version.outputs.VERSION }} does not exist"
+          fi
+      
+      - name: Extract changelog for this version
+        if: steps.tag_exists.outputs.EXISTS == 'false'
+        id: changelog
+        run: |
+          VERSION="${{ steps.cargo_version.outputs.VERSION }}"
+          # Extract the section for this version from CHANGELOG.md
+          CHANGELOG=$(awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md | sed '/^$/d')
+          
+          # Escape for GitHub Actions
+          CHANGELOG="${CHANGELOG//'%'/'%25'}"
+          CHANGELOG="${CHANGELOG//$'\n'/'%0A'}"
+          CHANGELOG="${CHANGELOG//$'\r'/'%0D'}"
+          
+          echo "CONTENT=$CHANGELOG" >> $GITHUB_OUTPUT
+      
+      - name: Create and push tag
+        if: steps.tag_exists.outputs.EXISTS == 'false'
+        run: |
+          VERSION="${{ steps.cargo_version.outputs.VERSION }}"
+          CHANGELOG="${{ steps.changelog.outputs.CONTENT }}"
+          
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Create annotated tag with changelog
+          git tag -a "v$VERSION" -m "Release v$VERSION" -m "$CHANGELOG"
+          
+          # Push the tag
+          git push origin "v$VERSION"
+          
+          echo "Created and pushed tag v$VERSION"

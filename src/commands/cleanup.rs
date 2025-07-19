@@ -1,6 +1,7 @@
 use anyhow::Result;
 use colored::*;
 use std::io::{self, Write};
+use std::time::SystemTime;
 
 use crate::git::GitRepo;
 
@@ -52,10 +53,27 @@ fn get_filtered_merged_branches(repo: &GitRepo, exclude_branch: Option<&str>) ->
         merged_branches.retain(|branch| branch != exclude);
     }
     
-    // Filter out branches that have no unique commits (newly created branches)
-    // These appear as "merged" but are actually just new branches without any work
+    // Filter to only include branches that were actually merged (not just new branches)
     merged_branches.retain(|branch| {
-        repo.has_unmerged_commits(branch).unwrap_or(true)
+        // Check if this branch was actually merged to main
+        match repo.was_branch_merged_to_main(branch) {
+            Ok(was_merged) => {
+                if !was_merged {
+                    // This branch appears as "merged" but wasn't actually merged
+                    // It's likely a new branch that hasn't diverged from main yet
+                    println!("{} Skipping branch '{}' (not actually merged - possibly newly created)", "⚠️".yellow(), branch);
+                    false  // Remove from merged_branches list
+                } else {
+                    // This branch was actually merged via a merge commit
+                    true  // Keep in merged_branches list
+                }
+            }
+            Err(e) => {
+                // On error, be conservative and don't delete
+                println!("{} Could not verify merge status for '{}': {}", "⚠️".yellow(), branch, e);
+                false  // Remove from merged_branches list
+            }
+        }
     });
     
     Ok(merged_branches)
@@ -115,20 +133,25 @@ fn process_single_worktree(
         return WorktreeAction::Ignored;
     }
     
-    // Check if branch has unmerged commits
-    match repo.has_unmerged_commits(branch) {
-        Ok(true) => {
-            println!("{} Skipping branch with unmerged commits: {}", "⚠️".yellow(), branch);
-            WorktreeAction::Skipped
-        }
-        Err(e) => {
-            println!("{} Could not check unmerged commits for {}: {}", "⚠️".yellow(), branch, e);
-            WorktreeAction::Skipped
-        }
-        Ok(false) => {
-            remove_worktree_and_report(repo, worktree, branch)
+    // Additional safety check: if the worktree directory was created recently (within 24 hours),
+    // skip it to avoid deleting newly created branches
+    if let Ok(metadata) = std::fs::metadata(&worktree.path) {
+        if let Ok(created) = metadata.created() {
+            let now = SystemTime::now();
+            if let Ok(age) = now.duration_since(created) {
+                let hours_old = age.as_secs() / 3600;
+                if hours_old < 24 {
+                    println!("{} Skipping recently created worktree: {} (created {} hours ago)", 
+                        "⚠️".yellow(), branch, hours_old);
+                    return WorktreeAction::Skipped;
+                }
+            }
         }
     }
+    
+    // At this point, we've already verified this branch was actually merged
+    // The 24-hour check above provides additional safety
+    remove_worktree_and_report(repo, worktree, branch)
 }
 
 fn remove_worktree_and_report(
