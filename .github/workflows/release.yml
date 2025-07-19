@@ -89,6 +89,7 @@ jobs:
         with:
           tag_name: ${{ github.ref }}
           files: ./${{ matrix.asset_name }}.tar.gz
+          fail_on_unmatched_files: false
 
   publish-crate:
     name: Publish to crates.io
