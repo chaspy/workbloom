@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Fix issue where newly created branches with no commits were incorrectly identified as merged branches and deleted
+- Implement proper detection of actually merged branches by checking merge commit parents
+
+### Added
+- New `was_branch_merged_to_main()` method that checks if a branch was actually merged via a merge commit
+- Additional 24-hour safety check for recently created worktrees
+
+### Changed
+- Improved branch cleanup logic to distinguish between truly merged branches and new branches that haven't diverged from main
+
 ## [0.1.3] - 2025-07-05
 
 ### Fixed
