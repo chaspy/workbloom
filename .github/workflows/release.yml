@@ -15,6 +15,8 @@ jobs:
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.get_release.outputs.upload_url || steps.create_release.outputs.upload_url }}
     steps:
       - uses: actions/checkout@v4
       
@@ -22,7 +24,17 @@ jobs:
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       
+      - name: Check if release exists
+        id: get_release
+        uses: cardinalby/git-get-release-action@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          tag: ${{ github.ref_name }}
+        continue-on-error: true
+      
       - name: Create Release
+        if: steps.get_release.outcome == 'failure'
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
@@ -35,8 +47,6 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          # Allow updating existing releases
-          allowUpdates: true
 
   build-and-upload:
     name: Build and Upload
