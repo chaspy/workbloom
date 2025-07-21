@@ -83,19 +83,46 @@ jobs:
         run: |
           VERSION="${{ steps.cargo_version.outputs.VERSION }}"
           
-          # Wait a moment for the tag to be available
-          sleep 5
+          # Poll for tag availability (max 30 seconds)
+          for i in {1..6}; do
+            if git ls-remote --tags origin | grep -q "refs/tags/v$VERSION"; then
+              echo "Tag v$VERSION is available"
+              break
+            fi
+            echo "Waiting for tag to be available... (attempt $i/6)"
+            sleep 5
+          done
           
-          # Create a release event manually
-          curl -X POST \
+          # Create release JSON with proper escaping
+          RELEASE_JSON=$(jq -n \
+            --arg tag "v$VERSION" \
+            --arg name "Release v$VERSION" \
+            --arg body "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details." \
+            '{
+              tag_name: $tag,
+              name: $name,
+              body: $body,
+              draft: false,
+              prerelease: false,
+              generate_release_notes: true
+            }')
+          
+          # Create a release event with error handling
+          HTTP_STATUS=$(curl -s -w "%{http_code}" -o /tmp/release_response.json \
+            -X POST \
             -H "Authorization: token ${{ github.token }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/releases \
-            -d '{
-              "tag_name": "v'$VERSION'",
-              "name": "Release v'$VERSION'",
-              "body": "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.",
-              "draft": false,
-              "prerelease": false,
-              "generate_release_notes": true
-            }'
+            -d "$RELEASE_JSON")
+          
+          if [ "$HTTP_STATUS" -eq 201 ]; then
+            echo "✅ Release created successfully"
+            cat /tmp/release_response.json | jq -r '.html_url'
+          elif [ "$HTTP_STATUS" -eq 422 ]; then
+            echo "⚠️ Release already exists (this is OK)"
+            cat /tmp/release_response.json | jq -r '.errors[].code'
+          else
+            echo "❌ Failed to create release (HTTP $HTTP_STATUS)"
+            cat /tmp/release_response.json
+            exit 1
+          fi
