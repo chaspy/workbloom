@@ -137,8 +137,6 @@ impl GitRepo {
     }
     
     pub fn was_branch_merged_to_main(&self, branch_name: &str) -> Result<bool> {
-        eprintln!("  DEBUG: Checking if '{}' was actually merged to main...", branch_name);
-        
         // Get the current HEAD commit of the branch
         let branch_head_output = Command::new("git")
             .args(["rev-parse", branch_name])
@@ -147,7 +145,6 @@ impl GitRepo {
             .context("Failed to get branch HEAD")?;
         
         let branch_head = String::from_utf8_lossy(&branch_head_output.stdout).trim().to_string();
-        eprintln!("    Branch HEAD: {}", &branch_head[..8]);
         
         // Get the current HEAD commit of main
         let main_head_output = Command::new("git")
@@ -157,12 +154,10 @@ impl GitRepo {
             .context("Failed to get main HEAD")?;
         
         let main_head = String::from_utf8_lossy(&main_head_output.stdout).trim().to_string();
-        eprintln!("    Main HEAD: {}", &main_head[..8]);
         
         // If branch points to the same commit as main, it's a new branch with no commits
         // This should NOT be considered as merged
         if branch_head == main_head {
-            eprintln!("    → Branch points to same commit as main - NOT merged (new branch)");
             return Ok(false);
         }
         
@@ -178,11 +173,9 @@ impl GitRepo {
             .trim()
             .parse::<i32>()
             .unwrap_or(0);
-        eprintln!("    Unique commits in branch: {}", unique_count);
         
         // If branch has no unique commits, check if it's actually been merged
         if unique_count == 0 {
-            eprintln!("    → Branch has no unique commits, checking merge history...");
             // Check if any merge commit in main has the branch HEAD as a parent
             let merge_commits_output = Command::new("git")
                 .args([
@@ -201,13 +194,9 @@ impl GitRepo {
             for line in merge_commits.lines() {
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() >= 2 && parts[1..].contains(&branch_head.as_str()) {
-                    eprintln!("    → Found merge commit with this branch - IS merged");
                     return Ok(true);
                 }
             }
-            eprintln!("    → No merge commit found - NOT merged");
-        } else {
-            eprintln!("    → Branch has {} unique commits - NOT merged", unique_count);
         }
         
         Ok(false)
