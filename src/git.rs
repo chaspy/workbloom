@@ -146,25 +146,56 @@ impl GitRepo {
         
         let branch_head = String::from_utf8_lossy(&branch_head_output.stdout).trim().to_string();
         
-        // Check if any merge commit in main has the branch HEAD as a parent
-        let merge_commits_output = Command::new("git")
-            .args([
-                "log",
-                "--merges",
-                "--format=%H %P",
-                "main"
-            ])
+        // Get the current HEAD commit of main
+        let main_head_output = Command::new("git")
+            .args(["rev-parse", "main"])
             .current_dir(&self.root_dir)
             .output()
-            .context("Failed to check merge commits")?;
+            .context("Failed to get main HEAD")?;
         
-        let merge_commits = String::from_utf8_lossy(&merge_commits_output.stdout);
+        let main_head = String::from_utf8_lossy(&main_head_output.stdout).trim().to_string();
         
-        // Check if any merge commit has our branch HEAD as a parent
-        for line in merge_commits.lines() {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 2 && parts[1..].contains(&branch_head.as_str()) {
-                return Ok(true);
+        // If branch points to the same commit as main, it's a new branch with no commits
+        // This should NOT be considered as merged
+        if branch_head == main_head {
+            return Ok(false);
+        }
+        
+        // Check if branch has any unique commits
+        // If it has no unique commits but is different from main, it might be behind main
+        let unique_commits_output = Command::new("git")
+            .args(["rev-list", "--count", &format!("main..{}", branch_name)])
+            .current_dir(&self.root_dir)
+            .output()
+            .context("Failed to count unique commits")?;
+        
+        let unique_count = String::from_utf8_lossy(&unique_commits_output.stdout)
+            .trim()
+            .parse::<i32>()
+            .unwrap_or(0);
+        
+        // If branch has no unique commits, check if it's actually been merged
+        if unique_count == 0 {
+            // Check if any merge commit in main has the branch HEAD as a parent
+            let merge_commits_output = Command::new("git")
+                .args([
+                    "log",
+                    "--merges",
+                    "--format=%H %P",
+                    "main"
+                ])
+                .current_dir(&self.root_dir)
+                .output()
+                .context("Failed to check merge commits")?;
+            
+            let merge_commits = String::from_utf8_lossy(&merge_commits_output.stdout);
+            
+            // Check if any merge commit has our branch HEAD as a parent
+            for line in merge_commits.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 && parts[1..].contains(&branch_head.as_str()) {
+                    return Ok(true);
+                }
             }
         }
         
