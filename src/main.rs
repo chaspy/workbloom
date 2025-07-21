@@ -4,7 +4,12 @@ use clap::{Parser, Subcommand};
 use workbloom::commands::{cleanup, setup};
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(
+    author,
+    version = concat!(env!("CARGO_PKG_VERSION"), " (", env!("GIT_HASH"), ")"),
+    about,
+    long_about = None
+)]
 #[command(propagate_version = true)]
 struct Cli {
     #[command(subcommand)]

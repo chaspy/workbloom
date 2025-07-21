@@ -88,16 +88,8 @@ pub fn execute(branch_name: &str, start_shell: bool) -> Result<()> {
 fn run_cleanup_if_exists(repo: &GitRepo, exclude_branch: Option<&str>) -> Result<()> {
     println!("{} Checking for merged branch worktrees to clean up...", "🧹".yellow());
     
-    let script_path = repo.root_dir.join("scripts/cleanup-merged-worktrees.sh");
-    if script_path.exists() {
-        std::process::Command::new("bash")
-            .arg(script_path)
-            .current_dir(&repo.root_dir)
-            .status()
-            .context("Failed to run cleanup script")?;
-    } else {
-        crate::commands::cleanup::cleanup_merged_worktrees_with_exclude(repo, exclude_branch)?;
-    }
+    // 常に新しい実装を使用（スクリプトは無視）
+    crate::commands::cleanup::cleanup_merged_worktrees_with_exclude(repo, exclude_branch)?;
     
     println!();
     Ok(())

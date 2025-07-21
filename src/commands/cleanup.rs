@@ -47,6 +47,7 @@ pub fn cleanup_merged_worktrees_with_exclude(repo: &GitRepo, exclude_branch: Opt
 }
 
 fn get_filtered_merged_branches(repo: &GitRepo, exclude_branch: Option<&str>) -> Result<Vec<String>> {
+    println!("{} Getting list of merged branches...", "📋".blue());
     let mut merged_branches = repo.get_merged_branches()?;
     
     if let Some(exclude) = exclude_branch {
@@ -56,24 +57,7 @@ fn get_filtered_merged_branches(repo: &GitRepo, exclude_branch: Option<&str>) ->
     // Filter to only include branches that were actually merged (not just new branches)
     merged_branches.retain(|branch| {
         // Check if this branch was actually merged to main
-        match repo.was_branch_merged_to_main(branch) {
-            Ok(was_merged) => {
-                if !was_merged {
-                    // This branch appears as "merged" but wasn't actually merged
-                    // It's likely a new branch that hasn't diverged from main yet
-                    println!("{} Skipping branch '{}' (not actually merged - possibly newly created)", "⚠️".yellow(), branch);
-                    false  // Remove from merged_branches list
-                } else {
-                    // This branch was actually merged via a merge commit
-                    true  // Keep in merged_branches list
-                }
-            }
-            Err(e) => {
-                // On error, be conservative and don't delete
-                println!("{} Could not verify merge status for '{}': {}", "⚠️".yellow(), branch, e);
-                false  // Remove from merged_branches list
-            }
-        }
+        repo.was_branch_merged_to_main(branch).unwrap_or(false)
     });
     
     Ok(merged_branches)
