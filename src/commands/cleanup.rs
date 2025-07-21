@@ -50,15 +50,24 @@ fn get_filtered_merged_branches(repo: &GitRepo, exclude_branch: Option<&str>) ->
     println!("{} Getting list of merged branches...", "📋".blue());
     let mut merged_branches = repo.get_merged_branches()?;
     
+    eprintln!("DEBUG: Raw merged branches from git: {:?}", merged_branches);
+    
     if let Some(exclude) = exclude_branch {
         merged_branches.retain(|branch| branch != exclude);
     }
     
     // Filter to only include branches that were actually merged (not just new branches)
+    let before_filter = merged_branches.len();
     merged_branches.retain(|branch| {
         // Check if this branch was actually merged to main
-        repo.was_branch_merged_to_main(branch).unwrap_or(false)
+        let was_merged = repo.was_branch_merged_to_main(branch).unwrap_or(false);
+        eprintln!("DEBUG: Branch '{}' - was_merged_to_main: {}", branch, was_merged);
+        was_merged
     });
+    let after_filter = merged_branches.len();
+    
+    eprintln!("DEBUG: Filtered branches: {} -> {}", before_filter, after_filter);
+    eprintln!("DEBUG: Final merged branches: {:?}", merged_branches);
     
     Ok(merged_branches)
 }
