@@ -57,13 +57,7 @@ fn get_filtered_merged_branches(repo: &GitRepo, exclude_branch: Option<&str>) ->
     // Filter to only include branches that were actually merged (not just new branches)
     merged_branches.retain(|branch| {
         // Check if this branch was actually merged to main
-        match repo.was_branch_merged_to_main(branch) {
-            Ok(was_merged) => was_merged,
-            Err(_) => {
-                // On error, be conservative and don't delete
-                false
-            }
-        }
+        repo.was_branch_merged_to_main(branch).unwrap_or(false)
     });
     
     Ok(merged_branches)

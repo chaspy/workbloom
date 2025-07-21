@@ -164,7 +164,7 @@ impl GitRepo {
         // Check if branch has any unique commits
         // If it has no unique commits but is different from main, it might be behind main
         let unique_commits_output = Command::new("git")
-            .args(["rev-list", "--count", &format!("main..{}", branch_name)])
+            .args(["rev-list", "--count", &format!("main..{branch_name}")])
             .current_dir(&self.root_dir)
             .output()
             .context("Failed to count unique commits")?;
