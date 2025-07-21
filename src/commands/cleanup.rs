@@ -50,6 +50,8 @@ fn get_filtered_merged_branches(repo: &GitRepo, exclude_branch: Option<&str>) ->
     println!("{} Getting list of merged branches...", "📋".blue());
     let mut merged_branches = repo.get_merged_branches()?;
     
+    // DEBUGを標準出力にも出力
+    println!("DEBUG: Raw merged branches from git: {:?}", merged_branches);
     eprintln!("DEBUG: Raw merged branches from git: {:?}", merged_branches);
     
     if let Some(exclude) = exclude_branch {
