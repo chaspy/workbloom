@@ -12,5 +12,5 @@ fn main() {
         .trim()
         .to_string();
     
-    println!("cargo:rustc-env=GIT_HASH={}", git_hash);
+    println!("cargo:rustc-env=GIT_HASH={git_hash}");
 }
