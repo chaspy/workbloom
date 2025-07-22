@@ -33,8 +33,15 @@ pub fn execute(branch_name: &str, start_shell: bool) -> Result<()> {
     
     pb.set_message("Checking branch...");
     if !repo.branch_exists(branch_name)? {
-        println!("{} Branch '{}' does not exist. Creating it...", "📝".yellow(), branch_name);
-        repo.create_branch(branch_name)?;
+        // Check if branch exists on remote
+        if repo.remote_branch_exists(branch_name)? {
+            println!("{} Branch '{}' exists on remote. Fetching and creating tracking branch...", "🌐".blue(), branch_name);
+            repo.fetch_remote_branch(branch_name)?;
+            repo.create_tracking_branch(branch_name)?;
+        } else {
+            println!("{} Branch '{}' does not exist. Creating it...", "📝".yellow(), branch_name);
+            repo.create_branch(branch_name)?;
+        }
     }
     pb.inc(1);
     
