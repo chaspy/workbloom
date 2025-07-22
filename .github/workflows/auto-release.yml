@@ -6,42 +6,63 @@ on:
       - main
     paths:
       - 'Cargo.toml'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., v0.1.7)'
+        required: true
+        type: string
 
 permissions:
   contents: write
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   check-and-tag:
     name: Check Version and Create Tag
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.VERSION }}
+      tag: ${{ steps.get_version.outputs.TAG }}
+      should_release: ${{ steps.tag_exists.outputs.EXISTS == 'false' || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Fetch all history for tags
       
-      - name: Get version from Cargo.toml
-        id: cargo_version
+      - name: Get version
+        id: get_version
         run: |
-          VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger - use input tag
+            VERSION="${{ github.event.inputs.tag }}"
+            VERSION="${VERSION#v}"  # Remove 'v' prefix if present
+          else
+            # Auto trigger - get from Cargo.toml
+            VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          fi
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Version found: $VERSION"
+          echo "TAG=v$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
       
       - name: Check if tag exists
         id: tag_exists
         run: |
-          if git rev-parse "v${{ steps.cargo_version.outputs.VERSION }}" >/dev/null 2>&1; then
+          if git rev-parse "${{ steps.get_version.outputs.TAG }}" >/dev/null 2>&1; then
             echo "EXISTS=true" >> $GITHUB_OUTPUT
-            echo "Tag v${{ steps.cargo_version.outputs.VERSION }} already exists"
+            echo "Tag ${{ steps.get_version.outputs.TAG }} already exists"
           else
             echo "EXISTS=false" >> $GITHUB_OUTPUT
-            echo "Tag v${{ steps.cargo_version.outputs.VERSION }} does not exist"
+            echo "Tag ${{ steps.get_version.outputs.TAG }} does not exist"
           fi
       
       - name: Extract changelog for this version
         if: steps.tag_exists.outputs.EXISTS == 'false'
         id: changelog
         run: |
-          VERSION="${{ steps.cargo_version.outputs.VERSION }}"
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
           # Escape dots in version for regex
           VERSION_REGEX=$(echo "$VERSION" | sed 's/\./\\./g')
           
@@ -64,7 +85,7 @@ jobs:
       - name: Create and push tag
         if: steps.tag_exists.outputs.EXISTS == 'false'
         run: |
-          VERSION="${{ steps.cargo_version.outputs.VERSION }}"
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
           
           # Configure git
           git config user.name "github-actions[bot]"
@@ -78,10 +99,10 @@ jobs:
           
           echo "Created and pushed tag v$VERSION"
       
-      - name: Trigger release workflow
+      - name: Create GitHub Release
         if: steps.tag_exists.outputs.EXISTS == 'false'
         run: |
-          VERSION="${{ steps.cargo_version.outputs.VERSION }}"
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
           
           # Poll for tag availability (max 30 seconds)
           for i in {1..6}; do
@@ -126,3 +147,93 @@ jobs:
             cat /tmp/release_response.json
             exit 1
           fi
+      
+      - name: Install Rust
+        if: steps.tag_exists.outputs.EXISTS == 'false'
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Check code quality
+        if: steps.tag_exists.outputs.EXISTS == 'false'
+        run: |
+          echo "Running cargo check..."
+          cargo check --all-targets
+          echo "Running cargo test..."
+          cargo test
+          echo "Code quality checks passed ✅"
+      
+      - name: Verify registry token
+        if: steps.tag_exists.outputs.EXISTS == 'false'
+        run: |
+          if [ -z "${{ secrets.CARGO_REGISTRY_TOKEN }}" ]; then
+            echo "❌ CARGO_REGISTRY_TOKEN secret is not set"
+            exit 1
+          fi
+          echo "✅ CARGO_REGISTRY_TOKEN is configured"
+      
+      - name: Publish to crates.io
+        if: steps.tag_exists.outputs.EXISTS == 'false'
+        run: |
+          echo "Publishing to crates.io..."
+          PUBLISH_OUTPUT=$(cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} 2>&1 || true)
+          echo "$PUBLISH_OUTPUT"
+          
+          if echo "$PUBLISH_OUTPUT" | grep -q "already uploaded"; then
+            echo "⚠️ Version already published (this is OK)"
+            exit 0
+          elif echo "$PUBLISH_OUTPUT" | grep -q "Uploading"; then
+            echo "✅ Successfully published to crates.io"
+            exit 0
+          elif echo "$PUBLISH_OUTPUT" | grep -q "error:"; then
+            echo "❌ Failed to publish to crates.io"
+            echo "$PUBLISH_OUTPUT"
+            exit 1
+          else
+            echo "⚠️ Publish completed with unknown status"
+            echo "$PUBLISH_OUTPUT"
+          fi
+
+  build-and-upload:
+    name: Build and Upload
+    needs: check-and-tag
+    if: needs.check-and-tag.outputs.should_release == 'true'
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: workbloom
+            asset_name: workbloom-linux-amd64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: workbloom
+            asset_name: workbloom-darwin-amd64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: workbloom
+            asset_name: workbloom-darwin-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+      
+      - name: Compress binary
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
+          mv ${{ matrix.asset_name }}.tar.gz ../../../
+      
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.check-and-tag.outputs.tag }}
+          files: ./${{ matrix.asset_name }}.tar.gz
+          fail_on_unmatched_files: false
