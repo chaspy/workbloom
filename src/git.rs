@@ -67,13 +67,14 @@ impl GitRepo {
             .context("Failed to get merged branches")?;
         
         let output_str = String::from_utf8_lossy(&output.stdout);
-        Ok(output_str
+        let branches: Vec<String> = output_str
             .lines()
             .filter(|line| !line.trim().is_empty())
             .filter(|line| !line.contains("*"))
             .filter(|line| !line.trim().eq("main") && !line.trim().eq("master"))
             .map(|line| line.trim().trim_start_matches("+ ").to_string())
-            .collect())
+            .collect();
+        Ok(branches)
     }
 
     pub fn remove_worktree(&self, worktree_path: &Path, force: bool) -> Result<()> {
@@ -136,7 +137,63 @@ impl GitRepo {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
     
+    pub fn remote_branch_exists(&self, branch_name: &str) -> Result<bool> {
+        // First, fetch remote branch information
+        let _ = Command::new("git")
+            .args(["fetch", "--prune"])
+            .current_dir(&self.root_dir)
+            .output()
+            .context("Failed to fetch remote branches")?;
+        
+        // Check if remote branch exists
+        let output = Command::new("git")
+            .args(["ls-remote", "--heads", "origin", branch_name])
+            .current_dir(&self.root_dir)
+            .output()
+            .context("Failed to check remote branch")?;
+        
+        let output_str = String::from_utf8_lossy(&output.stdout);
+        Ok(!output_str.trim().is_empty())
+    }
+    
+    pub fn fetch_remote_branch(&self, branch_name: &str) -> Result<()> {
+        // Fetch specific remote branch
+        Command::new("git")
+            .args(["fetch", "origin", &format!("refs/heads/{branch_name}:refs/remotes/origin/{branch_name}")])
+            .current_dir(&self.root_dir)
+            .status()
+            .context("Failed to fetch remote branch")?;
+        
+        Ok(())
+    }
+    
+    pub fn create_tracking_branch(&self, branch_name: &str) -> Result<()> {
+        // Create local branch tracking remote branch
+        Command::new("git")
+            .args(["checkout", "-b", branch_name, &format!("origin/{branch_name}")])
+            .current_dir(&self.root_dir)
+            .output()
+            .context("Failed to create tracking branch")?;
+        
+        // Switch back to the previous branch
+        Command::new("git")
+            .args(["checkout", "-"])
+            .current_dir(&self.root_dir)
+            .output()
+            .context("Failed to switch back to previous branch")?;
+        
+        Ok(())
+    }
+    
     pub fn was_branch_merged_to_main(&self, branch_name: &str) -> Result<bool> {
+        // First check if branch exists on remote
+        let remote_exists = self.remote_branch_exists(branch_name)?;
+        
+        // If branch doesn't exist on remote, it's likely a new branch that shouldn't be cleaned up
+        if !remote_exists {
+            return Ok(false);
+        }
+        
         // Get the current HEAD commit of the branch
         let branch_head_output = Command::new("git")
             .args(["rev-parse", branch_name])
@@ -176,6 +233,7 @@ impl GitRepo {
         
         // If branch has no unique commits, check if it's actually been merged
         if unique_count == 0 {
+            
             // Check if any merge commit in main has the branch HEAD as a parent
             let merge_commits_output = Command::new("git")
                 .args([
