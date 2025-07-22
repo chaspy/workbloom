@@ -1,0 +1,26 @@
+{
+  "name": "claude-comment-manager",
+  "version": "1.0.0",
+  "description": "Manage Claude PR review comments by minimizing old ones",
+  "main": "claude-comment-manager.js",
+  "scripts": {
+    "start": "node claude-comment-manager.js",
+    "minimize": "node claude-comment-manager.js",
+    "restore": "node claude-comment-manager.js restore",
+    "list": "node claude-comment-manager.js list"
+  },
+  "keywords": [
+    "github",
+    "claude",
+    "pr-review",
+    "comment-management"
+  ],
+  "author": "chaspy",
+  "license": "MIT",
+  "dependencies": {
+    "@octokit/rest": "^20.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -14,6 +14,7 @@ A Git worktree management tool written in Rust that automates worktree setup, fi
 - 🌐 **Port allocation** - Automatically assigns unique ports based on branch names
 - 🧹 **Smart cleanup** - Remove merged worktrees automatically or interactively
 - 🎨 **Beautiful output** - Colored terminal output with progress indicators
+- 💬 **Claude Comment Management** - Automatically minimize old Claude PR review comments
 
 ## Installation
 
@@ -148,6 +149,31 @@ cargo build --release
 # Run with debug output
 RUST_LOG=debug cargo run -- setup test-branch
 ```
+
+## Claude Comment Management
+
+古いClaudeのPRレビューコメントが蓄積することを防ぐため、自動的に最小化する機能を提供します。
+
+### 自動実行
+
+GitHub Actionsが以下の場合に自動実行されます：
+- PR作成・更新時
+- PRコメント作成時
+
+### 手動実行
+
+```bash
+cd scripts
+npm install
+
+# PR #123の古いClaudeコメントを最小化
+node claude-comment-manager.js 123
+
+# 詳細な使用方法
+node claude-comment-manager.js --help
+```
+
+詳細については [scripts/README.md](scripts/README.md) を参照してください。
 
 ## License
 
