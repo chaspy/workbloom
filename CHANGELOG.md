@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2025-07-22
+
+### Added
+- Support for creating worktrees from remote-only branches (#28)
+- Automatic detection and fetching of remote branches in `workbloom setup`
+- Branch name validation to prevent command injection attacks
+- Enhanced error handling with specific error messages for common failure scenarios
+
+### Changed
+- Improved performance by removing unnecessary fetch operations in remote branch detection
+- Enhanced error messages in `fetch_remote_branch()` and `create_tracking_branch()` methods
+
+### Security
+- Added comprehensive branch name validation to prevent command injection vulnerabilities
+
 ## [0.1.6] - 2025-07-21
 
 ### Fixed

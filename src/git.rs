@@ -1,9 +1,44 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub struct GitRepo {
     pub root_dir: PathBuf,
+}
+
+fn validate_branch_name(branch_name: &str) -> Result<()> {
+    // Check for empty branch name
+    if branch_name.is_empty() {
+        bail!("Branch name cannot be empty");
+    }
+    
+    // Check for dangerous characters that could lead to command injection
+    let dangerous_chars = ['$', '`', '(', ')', '{', '}', '|', '&', ';', '<', '>', '\n', '\r', '\0', '"', '\'', '\\'];
+    if branch_name.chars().any(|c| dangerous_chars.contains(&c)) {
+        bail!("Branch name contains invalid characters");
+    }
+    
+    // Check for valid git branch name patterns
+    // Git branch names cannot start/end with dots or slashes
+    if branch_name.starts_with('.') || branch_name.ends_with('.') {
+        bail!("Branch name cannot start or end with a dot");
+    }
+    
+    if branch_name.starts_with('/') || branch_name.ends_with('/') {
+        bail!("Branch name cannot start or end with a slash");
+    }
+    
+    // Check for consecutive dots
+    if branch_name.contains("..") {
+        bail!("Branch name cannot contain consecutive dots");
+    }
+    
+    // Check for @{ sequence which has special meaning in git
+    if branch_name.contains("@{") {
+        bail!("Branch name cannot contain '@{{' sequence");
+    }
+    
+    Ok(())
 }
 
 impl GitRepo {
@@ -13,6 +48,7 @@ impl GitRepo {
     }
 
     pub fn branch_exists(&self, branch_name: &str) -> Result<bool> {
+        validate_branch_name(branch_name)?;
         let output = Command::new("git")
             .args(["show-ref", "--verify", "--quiet", &format!("refs/heads/{branch_name}")])
             .current_dir(&self.root_dir)
@@ -23,6 +59,7 @@ impl GitRepo {
     }
 
     pub fn create_branch(&self, branch_name: &str) -> Result<()> {
+        validate_branch_name(branch_name)?;
         Command::new("git")
             .args(["checkout", "-b", branch_name])
             .current_dir(&self.root_dir)
@@ -39,6 +76,7 @@ impl GitRepo {
     }
 
     pub fn add_worktree(&self, worktree_path: &Path, branch_name: &str) -> Result<()> {
+        validate_branch_name(branch_name)?;
         Command::new("git")
             .args(["worktree", "add", worktree_path.to_str().unwrap(), branch_name])
             .current_dir(&self.root_dir)
@@ -94,6 +132,7 @@ impl GitRepo {
     }
 
     pub fn delete_branch(&self, branch_name: &str) -> Result<()> {
+        validate_branch_name(branch_name)?;
         Command::new("git")
             .args(["branch", "-D", branch_name])
             .current_dir(&self.root_dir)
@@ -104,6 +143,7 @@ impl GitRepo {
     }
 
     pub fn is_branch_merged(&self, branch_name: &str) -> Result<bool> {
+        validate_branch_name(branch_name)?;
         let output = Command::new("git")
             .args(["merge-base", "--is-ancestor", branch_name, "main"])
             .current_dir(&self.root_dir)
@@ -114,6 +154,7 @@ impl GitRepo {
     }
     
     pub fn has_unmerged_commits(&self, branch_name: &str) -> Result<bool> {
+        validate_branch_name(branch_name)?;
         // Check if branch has commits that are not in main
         let output = Command::new("git")
             .args(["rev-list", "--count", &format!("main..{branch_name}")])
@@ -138,54 +179,84 @@ impl GitRepo {
     }
     
     pub fn remote_branch_exists(&self, branch_name: &str) -> Result<bool> {
-        // First, fetch remote branch information
-        let _ = Command::new("git")
-            .args(["fetch", "--prune"])
-            .current_dir(&self.root_dir)
-            .output()
-            .context("Failed to fetch remote branches")?;
-        
-        // Check if remote branch exists
+        validate_branch_name(branch_name)?;
+        // Use ls-remote to check without fetching - much faster
         let output = Command::new("git")
             .args(["ls-remote", "--heads", "origin", branch_name])
             .current_dir(&self.root_dir)
             .output()
             .context("Failed to check remote branch")?;
         
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!("Failed to check remote branch: {}", stderr);
+        }
+        
         let output_str = String::from_utf8_lossy(&output.stdout);
         Ok(!output_str.trim().is_empty())
     }
     
     pub fn fetch_remote_branch(&self, branch_name: &str) -> Result<()> {
+        validate_branch_name(branch_name)?;
         // Fetch specific remote branch
-        Command::new("git")
+        let output = Command::new("git")
             .args(["fetch", "origin", &format!("refs/heads/{branch_name}:refs/remotes/origin/{branch_name}")])
             .current_dir(&self.root_dir)
-            .status()
-            .context("Failed to fetch remote branch")?;
+            .output()
+            .context("Failed to execute git fetch command")?;
+        
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if stderr.contains("couldn't find remote ref") {
+                bail!("Branch '{}' does not exist on remote", branch_name);
+            } else if stderr.contains("Permission denied") {
+                bail!("Permission denied when fetching from remote");
+            } else {
+                bail!("Failed to fetch remote branch '{}': {}", branch_name, stderr);
+            }
+        }
         
         Ok(())
     }
     
     pub fn create_tracking_branch(&self, branch_name: &str) -> Result<()> {
+        validate_branch_name(branch_name)?;
         // Create local branch tracking remote branch
-        Command::new("git")
+        let output = Command::new("git")
             .args(["checkout", "-b", branch_name, &format!("origin/{branch_name}")])
             .current_dir(&self.root_dir)
             .output()
-            .context("Failed to create tracking branch")?;
+            .context("Failed to execute git checkout command")?;
+        
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if stderr.contains("already exists") {
+                bail!("Branch '{}' already exists locally", branch_name);
+            } else if stderr.contains("not a valid object name") {
+                bail!("Remote branch 'origin/{}' not found. Did you forget to fetch?", branch_name);
+            } else {
+                bail!("Failed to create tracking branch '{}': {}", branch_name, stderr);
+            }
+        }
         
         // Switch back to the previous branch
-        Command::new("git")
+        let switch_output = Command::new("git")
             .args(["checkout", "-"])
             .current_dir(&self.root_dir)
             .output()
-            .context("Failed to switch back to previous branch")?;
+            .context("Failed to execute git checkout - command")?;
+        
+        if !switch_output.status.success() {
+            // Log warning but don't fail - the tracking branch was created successfully
+            eprintln!("Warning: Failed to switch back to previous branch: {}", 
+                     String::from_utf8_lossy(&switch_output.stderr));
+        }
         
         Ok(())
     }
     
     pub fn was_branch_merged_to_main(&self, branch_name: &str) -> Result<bool> {
+        validate_branch_name(branch_name)?;
         // First check if branch exists on remote
         let remote_exists = self.remote_branch_exists(branch_name)?;
         
