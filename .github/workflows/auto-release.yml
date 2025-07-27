@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'Cargo.toml'
+      - '.github/workflows/auto-release.yml'
   workflow_dispatch:
     inputs:
       tag:
@@ -59,7 +60,7 @@ jobs:
           fi
       
       - name: Extract changelog for this version
-        if: steps.tag_exists.outputs.EXISTS == 'false'
+        if: steps.tag_exists.outputs.EXISTS == 'false' || github.event_name == 'workflow_dispatch'
         id: changelog
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
@@ -149,11 +150,12 @@ jobs:
           fi
       
       - name: Install Rust
-        if: steps.tag_exists.outputs.EXISTS == 'false'
+        # Need Rust for cargo publish regardless of tag existence
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: dtolnay/rust-toolchain@stable
       
       - name: Check code quality
-        if: steps.tag_exists.outputs.EXISTS == 'false'
+        if: steps.tag_exists.outputs.EXISTS == 'false' || github.event_name == 'workflow_dispatch'
         run: |
           echo "Running cargo check..."
           cargo check --all-targets
@@ -162,7 +164,8 @@ jobs:
           echo "Code quality checks passed ✅"
       
       - name: Verify registry token
-        if: steps.tag_exists.outputs.EXISTS == 'false'
+        # Need to verify token for cargo publish
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           if [ -z "${{ secrets.CARGO_REGISTRY_TOKEN }}" ]; then
             echo "❌ CARGO_REGISTRY_TOKEN secret is not set"
@@ -171,7 +174,8 @@ jobs:
           echo "✅ CARGO_REGISTRY_TOKEN is configured"
       
       - name: Publish to crates.io
-        if: steps.tag_exists.outputs.EXISTS == 'false'
+        # Always try to publish - cargo will handle if already published
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           echo "Publishing to crates.io..."
           PUBLISH_OUTPUT=$(cargo publish --allow-dirty --token ${{ secrets.CARGO_REGISTRY_TOKEN }} 2>&1 || true)
