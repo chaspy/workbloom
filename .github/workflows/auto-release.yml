@@ -174,7 +174,7 @@ jobs:
         if: steps.tag_exists.outputs.EXISTS == 'false'
         run: |
           echo "Publishing to crates.io..."
-          PUBLISH_OUTPUT=$(cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} 2>&1 || true)
+          PUBLISH_OUTPUT=$(cargo publish --allow-dirty --token ${{ secrets.CARGO_REGISTRY_TOKEN }} 2>&1 || true)
           echo "$PUBLISH_OUTPUT"
           
           if echo "$PUBLISH_OUTPUT" | grep -q "already uploaded"; then
