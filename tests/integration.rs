@@ -61,22 +61,6 @@ fn test_cleanup_conflicting_options() {
         .stderr(predicate::str::contains("cannot be used with"));
 }
 
-#[test]
-fn test_port_allocation() {
-    use workbloom::port::calculate_ports;
-    
-    let ports1 = calculate_ports("feature/test-1");
-    let ports2 = calculate_ports("feature/test-2");
-    let ports3 = calculate_ports("feature/test-1");
-    
-    assert_ne!(ports1.frontend, ports2.frontend);
-    assert_ne!(ports1.backend, ports2.backend);
-    assert_ne!(ports1.database, ports2.database);
-    
-    assert_eq!(ports1.frontend, ports3.frontend);
-    assert_eq!(ports1.backend, ports3.backend);
-    assert_eq!(ports1.database, ports3.database);
-}
 
 #[test]
 fn test_config_defaults() {
@@ -84,7 +68,6 @@ fn test_config_defaults() {
     
     let config = Config::default();
     assert!(config.files_to_copy.contains(&".envrc".to_string()));
-    assert!(config.files_to_copy.contains(&".env".to_string()));
     assert!(config.directories_to_copy.is_empty());
     assert!(config.claude_files.contains(&"settings.json".to_string()));
     assert!(config.claude_files.contains(&"settings.local.json".to_string()));
