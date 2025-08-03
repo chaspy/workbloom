@@ -15,7 +15,6 @@ impl Default for Config {
         Self {
             files_to_copy: vec![
                 ".envrc".to_string(),
-                ".env".to_string(),
             ],
             directories_to_copy: vec![],
             claude_files: vec![

@@ -5,7 +5,7 @@ use std::env;
 use std::process::Command;
 use std::time::Duration;
 
-use crate::{config::Config, file_ops, git::GitRepo, port};
+use crate::{config::Config, file_ops, git::GitRepo};
 
 pub fn execute(branch_name: &str, start_shell: bool) -> Result<()> {
     let repo = GitRepo::new()?;
@@ -22,7 +22,7 @@ pub fn execute(branch_name: &str, start_shell: bool) -> Result<()> {
     
     run_cleanup_if_exists(&repo, Some(branch_name))?;
     
-    let pb = ProgressBar::new(6);
+    let pb = ProgressBar::new(4);
     pb.set_style(
         ProgressStyle::default_bar()
             .template("{spinner:.green} [{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg}")
@@ -59,24 +59,11 @@ pub fn execute(branch_name: &str, start_shell: bool) -> Result<()> {
     file_ops::setup_direnv(&worktree_path)?;
     pb.inc(1);
     
-    pb.set_message("Calculating ports...");
-    let ports = port::calculate_ports(branch_name);
-    pb.inc(1);
-    
-    pb.set_message("Updating .env with ports...");
-    file_ops::update_env_with_ports(&worktree_path, &ports)?;
-    
     pb.finish_with_message("Setup completed!");
     
     println!();
     println!("{} Git worktree setup completed!", "✅".green().bold());
     println!("{} Worktree location: {}", "📍".blue(), worktree_path.display());
-    println!();
-    
-    println!("{} Port allocation for this worktree:", "🌐".blue());
-    println!("   Frontend: http://localhost:{}", ports.frontend.to_string().cyan());
-    println!("   Backend:  http://localhost:{}", ports.backend.to_string().cyan());
-    println!("   Database: localhost:{}", ports.database.to_string().cyan());
     println!();
     
     if start_shell {
