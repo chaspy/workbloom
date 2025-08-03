@@ -5,13 +5,12 @@
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=chaspy_workbloom&metric=coverage)](https://sonarcloud.io/dashboard?id=chaspy_workbloom)
 [![Crates.io](https://img.shields.io/crates/v/workbloom.svg)](https://crates.io/crates/workbloom)
 
-A Git worktree management tool written in Rust that automates worktree setup, file copying, and port allocation.
+A Git worktree management tool written in Rust that automates worktree setup and file copying.
 
 ## Features
 
 - 🌲 **Easy worktree setup** - Create git worktrees with a single command
 - 📦 **Automatic file copying** - Copies essential files (.env, .envrc, etc.) to new worktrees
-- 🌐 **Port allocation** - Automatically assigns unique ports based on branch names
 - 🧹 **Smart cleanup** - Remove merged worktrees automatically or interactively
 - 🎨 **Beautiful output** - Colored terminal output with progress indicators
 - 💬 **Claude Comment Management** - Automatically minimize old Claude PR review comments
@@ -71,9 +70,7 @@ This will:
 1. Create a new worktree for the branch (creating the branch if it doesn't exist)
 2. Copy required files from the main repository (.env, .envrc, etc.)
 3. Setup direnv if available
-4. Write port allocations to .env file
-5. Display allocated ports for the worktree
-6. Start a new shell in the worktree directory (unless --no-shell is used)
+4. Start a new shell in the worktree directory (unless --no-shell is used)
 
 ### Clean up worktrees
 
@@ -119,20 +116,6 @@ certificates/
 ```
 
 See `.workbloom.example` for a complete example.
-
-## Port Allocation
-
-Workbloom automatically allocates unique ports for each worktree based on the branch name:
-- Frontend: 5173 + hash
-- Backend: 8080 + hash
-- Database: 5432 + hash
-
-The same branch name will always get the same ports. These port allocations are automatically written to the `.env` file:
-```
-FRONTEND_PORT=6174
-BACKEND_PORT=9081
-DATABASE_PORT=6433
-```
 
 ## Development
 
