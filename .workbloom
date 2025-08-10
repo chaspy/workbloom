@@ -1,6 +1,9 @@
 # workbloom configuration file
 # Files and directories to copy to git worktrees
 
+# Setup script (will be executed after copying)
+.workbloom-setup.sh
+
 # Rust development files
 Cargo.lock
 rust-toolchain.toml
