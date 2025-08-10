@@ -55,6 +55,9 @@ pub fn execute(branch_name: &str, start_shell: bool) -> Result<()> {
     file_ops::copy_required_files(&repo.root_dir, &worktree_path, &config)?;
     pb.inc(1);
     
+    pb.set_message("Running setup script...");
+    run_setup_script(&worktree_path)?;
+    
     pb.set_message("Setting up direnv...");
     file_ops::setup_direnv(&worktree_path)?;
     pb.inc(1);
@@ -74,6 +77,40 @@ pub fn execute(branch_name: &str, start_shell: bool) -> Result<()> {
         println!("cd {}", worktree_path.display());
         println!();
         println!("💡 Tip: Default behavior now starts a shell. Use 'workbloom setup {branch_name} --no-shell' to skip");
+    }
+    
+    Ok(())
+}
+
+fn run_setup_script(worktree_path: &std::path::Path) -> Result<()> {
+    let setup_script_path = worktree_path.join(".workbloom-setup.sh");
+    
+    if setup_script_path.exists() {
+        println!("{} Found .workbloom-setup.sh, executing...", "🚀".cyan());
+        
+        // Make the script executable
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&setup_script_path)?.permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&setup_script_path, perms)?;
+        }
+        
+        // Execute the script
+        let output = Command::new("bash")
+            .arg(&setup_script_path)
+            .current_dir(worktree_path)
+            .output()
+            .context("Failed to execute .workbloom-setup.sh")?;
+        
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            eprintln!("{} Warning: .workbloom-setup.sh failed: {}", "⚠️".yellow(), stderr);
+            // Don't fail the entire setup if the script fails
+        } else {
+            println!("{} Setup script executed successfully", "✨".green());
+        }
     }
     
     Ok(())
