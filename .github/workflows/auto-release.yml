@@ -29,7 +29,7 @@ jobs:
       tag: ${{ steps.get_version.outputs.TAG }}
       should_release: ${{ steps.tag_exists.outputs.EXISTS == 'false' || github.event_name == 'workflow_dispatch' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0  # Fetch all history for tags
       
@@ -217,7 +217,7 @@ jobs:
             asset_name: workbloom-darwin-arm64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
       
