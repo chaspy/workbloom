@@ -18,7 +18,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    #[command(about = "Set up a new git worktree with automatic file copying")]
+    #[command(about = "Set up a new git worktree with automatic file copying", visible_alias = "s")]
     Setup {
         #[arg(help = "The branch name for the worktree")]
         branch_name: String,
@@ -27,7 +27,7 @@ enum Commands {
         no_shell: bool,
     },
     
-    #[command(about = "Clean up worktrees")]
+    #[command(about = "Clean up worktrees", visible_alias = "c")]
     Cleanup {
         #[arg(long, conflicts_with_all = &["pattern", "interactive", "status"], help = "Remove only merged worktrees")]
         merged: bool,
