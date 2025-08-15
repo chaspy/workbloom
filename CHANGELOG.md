@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2025-08-15
+
+### Added
+- Short command aliases for improved usability: `s` for `setup` and `c` for `cleanup`
+- Documentation for shell alias `wb` to further reduce typing
+
+### Changed
+- Enhanced README with shell integration recommendations for shorter commands
+
 ## [0.3.0] - 2025-08-10
 
 ### Added

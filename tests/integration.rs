@@ -74,6 +74,37 @@ fn test_config_defaults() {
 }
 
 #[test]
+fn test_setup_short_alias() {
+    Command::cargo_bin("workbloom")
+        .unwrap()
+        .args(["s", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Set up a new git worktree"));
+}
+
+#[test]
+fn test_cleanup_short_alias() {
+    Command::cargo_bin("workbloom")
+        .unwrap()
+        .args(["c", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Clean up worktrees"));
+}
+
+#[test]
+fn test_help_shows_aliases() {
+    Command::cargo_bin("workbloom")
+        .unwrap()
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[aliases: s]"))
+        .stdout(predicate::str::contains("[aliases: c]"));
+}
+
+#[test]
 fn test_setup_script_detection() {
     use std::fs;
     use tempfile::TempDir;

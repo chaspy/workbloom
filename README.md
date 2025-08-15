@@ -36,6 +36,20 @@ cargo install --path .
 
 ### Shell Integration (Recommended)
 
+#### Alias for shorter commands
+
+Add this alias to your `.bashrc` or `.zshrc` for shorter commands:
+
+```bash
+alias wb='workbloom'
+```
+
+With this alias and the built-in short aliases, you can use:
+- `wb s feature/my-feature` instead of `workbloom setup feature/my-feature`
+- `wb c` instead of `workbloom cleanup`
+
+#### Auto-change directory after setup
+
 To automatically change to the worktree directory after setup, add this function to your `.bashrc` or `.zshrc`:
 
 ```bash
@@ -51,7 +65,21 @@ workbloom-setup() {
     fi
 }
 
+# Or with the alias:
+wb-setup() {
+    local output=$(wb s "$@")
+    echo "$output"
+    
+    # Extract the worktree path and change to it
+    local worktree_path=$(echo "$output" | grep "📍 Worktree location:" | sed 's/.*: //')
+    if [ -n "$worktree_path" ] && [ -d "$worktree_path" ]; then
+        cd "$worktree_path"
+        echo "📂 Changed to worktree directory: $(pwd)"
+    fi
+}
+
 # Then use: workbloom-setup feature/my-feature
+# Or: wb-setup feature/my-feature
 ```
 
 ## Usage
@@ -61,9 +89,11 @@ workbloom-setup() {
 ```bash
 # Setup and start a new shell in the worktree directory (default)
 workbloom setup feature/my-new-feature
+# Or using short alias: wb s feature/my-new-feature
 
 # Setup without starting a shell
 workbloom setup feature/my-new-feature --no-shell
+# Or using short alias: wb s feature/my-new-feature --no-shell
 ```
 
 This will:
@@ -77,15 +107,19 @@ This will:
 ```bash
 # Remove merged worktrees (default)
 workbloom cleanup
+# Or using short alias: wb c
 
 # Remove worktrees matching a pattern
 workbloom cleanup --pattern "feature/old-"
+# Or using short alias: wb c --pattern "feature/old-"
 
 # Interactive cleanup
 workbloom cleanup --interactive
+# Or using short alias: wb c --interactive
 
 # Show merge status of all worktrees
 workbloom cleanup --status
+# Or using short alias: wb c --status
 ```
 
 ## Configuration
