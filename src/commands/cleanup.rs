@@ -9,7 +9,7 @@ pub fn execute(mode: CleanupMode) -> Result<()> {
     let repo = GitRepo::new()?;
     
     match mode {
-        CleanupMode::Merged => cleanup_merged_only(&repo),
+        CleanupMode::Merged { force } => cleanup_merged_only(&repo, force),
         CleanupMode::Pattern(pattern) => cleanup_by_pattern(&repo, &pattern),
         CleanupMode::Interactive => interactive_cleanup(&repo),
         CleanupMode::Status => show_status(&repo),
@@ -17,7 +17,7 @@ pub fn execute(mode: CleanupMode) -> Result<()> {
 }
 
 pub enum CleanupMode {
-    Merged,
+    Merged { force: bool },
     Pattern(String),
     Interactive,
     Status,
@@ -27,10 +27,10 @@ pub fn cleanup_merged_worktrees(repo: &GitRepo) -> Result<()> {
     cleanup_merged_worktrees_with_exclude(repo, None)
 }
 
-pub fn cleanup_merged_worktrees_with_exclude(repo: &GitRepo, exclude_branch: Option<&str>) -> Result<()> {
+pub fn cleanup_merged_worktrees_with_force(repo: &GitRepo, exclude_branch: Option<&str>, force: bool) -> Result<()> {
     println!("{} Cleaning up worktrees for merged branches...", "🧹".yellow());
     
-    let merged_branches = get_filtered_merged_branches(repo, exclude_branch)?;
+    let merged_branches = get_filtered_merged_branches(repo, exclude_branch, force)?;
     
     if merged_branches.is_empty() {
         println!("{} No merged branches found", "✨".green());
@@ -46,7 +46,26 @@ pub fn cleanup_merged_worktrees_with_exclude(repo: &GitRepo, exclude_branch: Opt
     Ok(())
 }
 
-fn get_filtered_merged_branches(repo: &GitRepo, exclude_branch: Option<&str>) -> Result<Vec<String>> {
+pub fn cleanup_merged_worktrees_with_exclude(repo: &GitRepo, exclude_branch: Option<&str>) -> Result<()> {
+    println!("{} Cleaning up worktrees for merged branches...", "🧹".yellow());
+    
+    let merged_branches = get_filtered_merged_branches(repo, exclude_branch, false)?;
+    
+    if merged_branches.is_empty() {
+        println!("{} No merged branches found", "✨".green());
+        return Ok(());
+    }
+    
+    display_merged_branches(&merged_branches, exclude_branch);
+    
+    let (cleaned_count, skipped_count) = process_worktrees(repo, &merged_branches)?;
+    
+    display_cleanup_summary(cleaned_count, skipped_count);
+    
+    Ok(())
+}
+
+fn get_filtered_merged_branches(repo: &GitRepo, exclude_branch: Option<&str>, force: bool) -> Result<Vec<String>> {
     println!("{} Getting list of merged branches...", "📋".blue());
     let mut merged_branches = repo.get_merged_branches()?;
     
@@ -54,8 +73,8 @@ fn get_filtered_merged_branches(repo: &GitRepo, exclude_branch: Option<&str>) ->
         merged_branches.retain(|branch| branch != exclude);
     }
     
-    // Apply safety filters to prevent deletion of new branches
-    merged_branches = apply_safety_filters(repo, merged_branches)?;
+    // Apply safety filters to prevent deletion of new branches (unless --force is used)
+    merged_branches = apply_safety_filters(repo, merged_branches, force)?;
     
     Ok(merged_branches)
 }
@@ -170,8 +189,8 @@ fn display_cleanup_summary(cleaned_count: usize, skipped_count: usize) {
     }
 }
 
-fn cleanup_merged_only(repo: &GitRepo) -> Result<()> {
-    cleanup_merged_worktrees(repo)
+fn cleanup_merged_only(repo: &GitRepo, force: bool) -> Result<()> {
+    cleanup_merged_worktrees_with_force(repo, None, force)
 }
 
 fn cleanup_by_pattern(repo: &GitRepo, pattern: &str) -> Result<()> {
@@ -273,13 +292,17 @@ fn remove_worktree_with_branch(repo: &GitRepo, path: &std::path::Path, branch: &
     Ok(())
 }
 
-fn apply_safety_filters(repo: &GitRepo, branches: Vec<String>) -> Result<Vec<String>> {
+fn apply_safety_filters(repo: &GitRepo, branches: Vec<String>, force: bool) -> Result<Vec<String>> {
     if branches.is_empty() {
         return Ok(branches);
     }
     
-    // Batch get remote branches for performance
-    let remote_branches = get_all_remote_branches(repo)?;
+    // Batch get remote branches for performance (unless --force is used)
+    let remote_branches = if force {
+        Vec::new()
+    } else {
+        get_all_remote_branches(repo)?
+    };
     
     // Get main branch head for comparison
     let main_head = get_branch_head(repo, "main")?;
@@ -288,10 +311,12 @@ fn apply_safety_filters(repo: &GitRepo, branches: Vec<String>) -> Result<Vec<Str
     
     for branch in branches {
         // Safety check 1: Only delete branches that exist on remote
-        // This protects local-only development branches
-        if !remote_branches.contains(&branch) {
+        // This protects local-only development branches (skip if --force is used)
+        if !force && !remote_branches.contains(&branch) {
             println!("  {} Skipping local-only branch: {}", "🔒".yellow(), branch);
             continue;
+        } else if force && !remote_branches.is_empty() && !remote_branches.contains(&branch) {
+            println!("  {} Forcing cleanup of local-only branch: {}", "💪".yellow(), branch);
         }
         
         // Safety check 2: Don't delete branches that point to the same commit as main

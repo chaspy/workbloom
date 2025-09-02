@@ -109,6 +109,10 @@ This will:
 workbloom cleanup
 # Or using short alias: wb c
 
+# Force removal of merged worktrees (skip remote branch checks)
+workbloom cleanup --merged --force
+# Or using short alias: wb c --merged --force
+
 # Remove worktrees matching a pattern
 workbloom cleanup --pattern "feature/old-"
 # Or using short alias: wb c --pattern "feature/old-"
@@ -121,6 +125,16 @@ workbloom cleanup --interactive
 workbloom cleanup --status
 # Or using short alias: wb c --status
 ```
+
+#### Cleanup Options
+
+- **Default**: Removes only merged worktrees that exist on the remote repository
+- **`--force`**: Skips remote branch checks and removes all merged worktrees (use with caution)
+  - Useful when remote branches have been deleted after merging
+  - Still protects recently created worktrees (within 24 hours)
+- **`--pattern`**: Removes worktrees matching the specified pattern
+- **`--interactive`**: Prompts for confirmation before removing each worktree
+- **`--status`**: Shows the merge status of all branches without removing anything
 
 ## Configuration
 

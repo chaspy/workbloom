@@ -40,6 +40,9 @@ enum Commands {
         
         #[arg(long, conflicts_with_all = &["merged", "pattern", "interactive"], help = "Show merge status of all branches")]
         status: bool,
+
+        #[arg(long, help = "Force cleanup without remote branch checks (use with --merged)")]
+        force: bool,
     },
 }
 
@@ -57,9 +60,10 @@ fn main() -> Result<()> {
             pattern,
             interactive,
             status,
+            force,
         } => {
             let mode = if merged || (pattern.is_none() && !interactive && !status) {
-                cleanup::CleanupMode::Merged
+                cleanup::CleanupMode::Merged { force }
             } else if let Some(p) = pattern {
                 cleanup::CleanupMode::Pattern(p)
             } else if interactive {
