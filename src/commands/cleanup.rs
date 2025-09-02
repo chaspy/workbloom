@@ -297,6 +297,13 @@ fn apply_safety_filters(repo: &GitRepo, branches: Vec<String>, force: bool) -> R
         return Ok(branches);
     }
     
+    let branches_after_remote_filter = filter_remote_branches(repo, branches, force)?;
+    let safe_branches = filter_identical_commits(repo, branches_after_remote_filter)?;
+    
+    Ok(safe_branches)
+}
+
+fn filter_remote_branches(repo: &GitRepo, branches: Vec<String>, force: bool) -> Result<Vec<String>> {
     // Batch get remote branches for performance (unless --force is used)
     let remote_branches = if force {
         Vec::new()
@@ -304,21 +311,30 @@ fn apply_safety_filters(repo: &GitRepo, branches: Vec<String>, force: bool) -> R
         get_all_remote_branches(repo)?
     };
     
-    // Get main branch head for comparison
-    let main_head = get_branch_head(repo, "main")?;
-    
-    let mut safe_branches = Vec::new();
+    let mut filtered_branches = Vec::new();
     
     for branch in branches {
         // Safety check 1: Only delete branches that exist on remote
         // This protects local-only development branches (skip if --force is used)
         if !force && !remote_branches.contains(&branch) {
-            println!("  {} Skipping local-only branch: {}", "🔒".yellow(), branch);
+            println!("  {} Skipping local-only branch: {} (use --force to override)", "🔒".yellow(), branch);
             continue;
         } else if force && !remote_branches.is_empty() && !remote_branches.contains(&branch) {
-            println!("  {} Forcing cleanup of local-only branch: {}", "💪".yellow(), branch);
+            println!("  {} Force cleanup enabled: removing local-only branch: {}", "💪".yellow(), branch);
         }
         
+        filtered_branches.push(branch);
+    }
+    
+    Ok(filtered_branches)
+}
+
+fn filter_identical_commits(repo: &GitRepo, branches: Vec<String>) -> Result<Vec<String>> {
+    // Get main branch head for comparison
+    let main_head = get_branch_head(repo, "main")?;
+    let mut safe_branches = Vec::new();
+    
+    for branch in branches {
         // Safety check 2: Don't delete branches that point to the same commit as main
         // This protects newly created branches with no commits
         match get_branch_head(repo, &branch) {
@@ -348,6 +364,11 @@ fn get_all_remote_branches(repo: &GitRepo) -> Result<Vec<String>> {
         .context("Failed to get remote branches")?;
     
     if !output.status.success() {
+        // Log remote access issues for debugging purposes
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.trim().is_empty() {
+            println!("  {} Remote branch access warning: {}", "⚠️".yellow(), stderr.trim());
+        }
         return Ok(Vec::new()); // Return empty if no remote or access issues
     }
     

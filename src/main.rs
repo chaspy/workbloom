@@ -41,7 +41,7 @@ enum Commands {
         #[arg(long, conflicts_with_all = &["merged", "pattern", "interactive"], help = "Show merge status of all branches")]
         status: bool,
 
-        #[arg(long, help = "Force cleanup without remote branch checks (use with --merged)")]
+        #[arg(long, help = "Force cleanup without remote branch checks (use with --merged). Still protects recently created worktrees")]
         force: bool,
     },
 }
