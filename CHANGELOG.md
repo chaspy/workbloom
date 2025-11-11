@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - Remove Claude Code GitHub Action workflow now that the service contract has ended
 
+## [0.7.0] - 2025-11-04
+
+### Added
+- `workbloom cleanup --status` に最終アクティビティ時間を表示し、作業ツリーの停滞状況を可視化
+- 14日以上更新がない未マージ作業ツリーに対して削除提案を対話形式で実行できるフロー
+
+### Changed
+- マージ済み作業ツリーのステータス表示に24時間以上経過している場合の警告を追加
+
 ## [0.6.0] - 2025-11-04
 
 ### Changed
@@ -113,6 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial features
 
+[0.7.0]: https://github.com/chaspy/workbloom/compare/v0.6.0...v0.7.0
 [0.6.1]: https://github.com/chaspy/workbloom/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/chaspy/workbloom/compare/v0.3.1...v0.6.0
 [0.3.1]: https://github.com/chaspy/workbloom/compare/v0.3.0...v0.3.1

@@ -12,6 +12,7 @@ A Git worktree management tool written in Rust that automates worktree setup and
 - 🌲 **Easy worktree setup** - Create git worktrees with a single command
 - 📦 **Automatic file copying** - Copies essential files (.env, .envrc, etc.) to new worktrees
 - 🧹 **Smart cleanup** - Remove merged worktrees automatically or interactively
+- ⏱️ **Activity-aware status** - Highlight stale worktrees with last activity timestamps
 - 🎨 **Beautiful output** - Colored terminal output with progress indicators
 - 💬 **Claude Comment Management** - Automatically minimize old Claude PR review comments
 
@@ -134,7 +135,22 @@ workbloom cleanup --status
   - Still protects recently created worktrees (within 24 hours)
 - **`--pattern`**: Removes worktrees matching the specified pattern
 - **`--interactive`**: Prompts for confirmation before removing each worktree
-- **`--status`**: Shows the merge status of all branches without removing anything
+- **`--status`**: Shows the merge status and last activity of all branches without removing anything, and optionally offers to delete stale ones
+
+Sample status output:
+
+```bash
+📍 main (current branch)
+✅ feature/login (merged, last activity 2h ago)
+❌ issue-123 (not merged, last activity 21d ago ⚠️ stale)
+
+🧭 The following worktrees have seen no activity for 14 days or more:
+  - issue-123 (last activity 21d ago)
+
+⏳ Branch 'issue-123' has been inactive for 21d ago
+    Worktree path: /path/to/worktree-issue-123
+    Remove this worktree? (y/N)
+```
 
 ## Configuration
 
