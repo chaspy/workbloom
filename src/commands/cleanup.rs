@@ -317,7 +317,7 @@ fn show_status(repo: &GitRepo) -> Result<()> {
                 .get_branch_last_commit_time(branch)?
                 .and_then(|ts| now.duration_since(ts).ok());
             let activity_label = activity
-                .map(|duration| format_duration(duration))
+                .map(format_duration)
                 .unwrap_or_else(|| "unknown".to_string());
 
             if merged {
@@ -506,18 +506,18 @@ fn format_duration(duration: Duration) -> String {
 
     let days = secs / (24 * 60 * 60);
     if days > 0 {
-        return format!("{}d ago", days);
+        return format!("{days}d ago");
     }
 
     let hours = secs / (60 * 60);
     if hours > 0 {
-        return format!("{}h ago", hours);
+        return format!("{hours}h ago");
     }
 
     if secs < 60 {
         "<1m ago".to_string()
     } else {
         let minutes = secs / 60;
-        format!("{}m ago", minutes)
+        format!("{minutes}m ago")
     }
 }
