@@ -297,120 +297,181 @@ fn show_status(repo: &GitRepo) -> Result<()> {
     let mut stale_candidates: Vec<(crate::git::WorktreeInfo, String, Duration)> = Vec::new();
 
     for worktree in &worktrees {
-        if worktree.path == repo.root_dir {
-            println!("{} main (current branch)", "📍".blue());
+        if handle_main_worktree(repo, worktree) || handle_detached_worktree(worktree) {
             continue;
         }
 
-        if worktree.is_detached {
-            println!(
-                "{} {} (detached HEAD)",
-                "⚠️".yellow(),
-                worktree.path.display()
-            );
+        let Some(branch) = worktree.branch.as_ref() else {
+            print_unknown_branch(worktree);
             continue;
-        }
+        };
 
-        if let Some(branch) = &worktree.branch {
-            let merged = repo.is_branch_merged(branch)?;
-            let activity = repo
-                .get_branch_last_commit_time(branch)?
-                .and_then(|ts| now.duration_since(ts).ok());
-            let activity_label = activity
-                .map(format_duration)
-                .unwrap_or_else(|| "unknown".to_string());
-
-            if merged {
-                let warn_old = activity
-                    .map(|duration| duration >= Duration::from_secs(24 * 60 * 60))
-                    .unwrap_or(true);
-                if warn_old {
-                    println!(
-                        "{} {} (merged, last activity {}, ⚠️ >24h)",
-                        "✅".green(),
-                        branch,
-                        activity_label
-                    );
-                } else {
-                    println!(
-                        "{} {} (merged, last activity {})",
-                        "✅".green(),
-                        branch,
-                        activity_label
-                    );
-                }
-            } else {
-                let is_stale = activity
-                    .map(|duration| duration >= stale_threshold)
-                    .unwrap_or(false);
-
-                if is_stale {
-                    println!(
-                        "{} {} (not merged, last activity {} ⚠️ stale)",
-                        "❌".red(),
-                        branch,
-                        activity_label
-                    );
-                } else {
-                    println!(
-                        "{} {} (not merged, last activity {})",
-                        "❌".red(),
-                        branch,
-                        activity_label
-                    );
-                }
-
-                if let Some(duration) = activity {
-                    if duration >= stale_threshold {
-                        stale_candidates.push((worktree.clone(), branch.clone(), duration));
-                    }
-                }
-            }
-        } else {
-            println!(
-                "{} {} (unknown branch)",
-                "⚠️".yellow(),
-                worktree.path.display()
-            );
+        let info = collect_branch_info(repo, branch, now)?;
+        if let Some(duration) = print_branch_status(branch, &info, stale_threshold) {
+            stale_candidates.push((worktree.clone(), branch.clone(), duration));
         }
     }
 
-    if !stale_candidates.is_empty() {
-        println!();
+    handle_stale_candidates(repo, stale_candidates)
+}
+
+struct BranchInfo {
+    merged: bool,
+    activity: Option<Duration>,
+    activity_label: String,
+}
+
+fn handle_main_worktree(repo: &GitRepo, worktree: &crate::git::WorktreeInfo) -> bool {
+    if worktree.path == repo.root_dir {
+        println!("{} main (current branch)", "📍".blue());
+        return true;
+    }
+    false
+}
+
+fn handle_detached_worktree(worktree: &crate::git::WorktreeInfo) -> bool {
+    if worktree.is_detached {
         println!(
-            "{} The following worktrees have seen no activity for 14 days or more:",
-            "🧭".blue()
+            "{} {} (detached HEAD)",
+            "⚠️".yellow(),
+            worktree.path.display()
         );
-        for (_, branch, duration) in &stale_candidates {
-            println!(
-                "  - {} (last activity {})",
-                branch.cyan(),
-                format_duration(*duration)
-            );
+        return true;
+    }
+    false
+}
+
+fn print_unknown_branch(worktree: &crate::git::WorktreeInfo) {
+    println!(
+        "{} {} (unknown branch)",
+        "⚠️".yellow(),
+        worktree.path.display()
+    );
+}
+
+fn collect_branch_info(repo: &GitRepo, branch: &str, now: SystemTime) -> Result<BranchInfo> {
+    let merged = repo.is_branch_merged(branch)?;
+    let activity = repo
+        .get_branch_last_commit_time(branch)?
+        .and_then(|ts| now.duration_since(ts).ok());
+    let activity_label = activity
+        .map(format_duration)
+        .unwrap_or_else(|| "unknown".to_string());
+
+    Ok(BranchInfo {
+        merged,
+        activity,
+        activity_label,
+    })
+}
+
+fn print_branch_status(
+    branch: &str,
+    info: &BranchInfo,
+    stale_threshold: Duration,
+) -> Option<Duration> {
+    if info.merged {
+        print_merged_branch(branch, info);
+        None
+    } else {
+        print_active_branch(branch, info, stale_threshold)
+    }
+}
+
+fn print_merged_branch(branch: &str, info: &BranchInfo) {
+    let warn_old = info
+        .activity
+        .map(|duration| duration >= Duration::from_secs(24 * 60 * 60))
+        .unwrap_or(true);
+
+    if warn_old {
+        println!(
+            "{} {} (merged, last activity {}, ⚠️ >24h)",
+            "✅".green(),
+            branch,
+            info.activity_label
+        );
+    } else {
+        println!(
+            "{} {} (merged, last activity {})",
+            "✅".green(),
+            branch,
+            info.activity_label
+        );
+    }
+}
+
+fn print_active_branch(
+    branch: &str,
+    info: &BranchInfo,
+    stale_threshold: Duration,
+) -> Option<Duration> {
+    let is_stale = info
+        .activity
+        .map(|duration| duration >= stale_threshold)
+        .unwrap_or(false);
+
+    if is_stale {
+        println!(
+            "{} {} (not merged, last activity {} ⚠️ stale)",
+            "❌".red(),
+            branch,
+            info.activity_label
+        );
+        info.activity
+    } else {
+        println!(
+            "{} {} (not merged, last activity {})",
+            "❌".red(),
+            branch,
+            info.activity_label
+        );
+        None
+    }
+}
+
+fn handle_stale_candidates(
+    repo: &GitRepo,
+    stale_candidates: Vec<(crate::git::WorktreeInfo, String, Duration)>,
+) -> Result<()> {
+    if stale_candidates.is_empty() {
+        return Ok(());
+    }
+
+    println!();
+    println!(
+        "{} The following worktrees have seen no activity for 14 days or more:",
+        "🧭".blue()
+    );
+    for (_, branch, duration) in &stale_candidates {
+        println!(
+            "  - {} (last activity {})",
+            branch.cyan(),
+            format_duration(*duration)
+        );
+    }
+    println!();
+
+    for (worktree, branch, duration) in stale_candidates {
+        println!(
+            "{} Branch '{}' has been inactive for {}",
+            "⏳".yellow(),
+            branch,
+            format_duration(duration)
+        );
+        println!("    Worktree path: {}", worktree.path.display());
+        print!("    Remove this worktree? (y/N) ");
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+
+        if input.trim().eq_ignore_ascii_case("y") {
+            remove_worktree_with_branch(repo, &worktree.path, &branch)?;
+        } else {
+            println!("    Skipped");
         }
         println!();
-
-        for (worktree, branch, duration) in stale_candidates {
-            println!(
-                "{} Branch '{}' has been inactive for {}",
-                "⏳".yellow(),
-                branch,
-                format_duration(duration)
-            );
-            println!("    Worktree path: {}", worktree.path.display());
-            print!("    Remove this worktree? (y/N) ");
-            io::stdout().flush()?;
-
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
-
-            if input.trim().eq_ignore_ascii_case("y") {
-                remove_worktree_with_branch(repo, &worktree.path, &branch)?;
-            } else {
-                println!("    Skipped");
-            }
-            println!();
-        }
     }
 
     Ok(())
