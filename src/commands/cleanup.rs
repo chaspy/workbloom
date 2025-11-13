@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use colored::*;
 use std::io::{self, Write};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use crate::git::GitRepo;
 
@@ -292,17 +292,186 @@ fn show_status(repo: &GitRepo) -> Result<()> {
     println!();
 
     let worktrees = repo.list_worktrees()?;
+    let now = SystemTime::now();
+    let stale_threshold = Duration::from_secs(14 * 24 * 60 * 60);
+    let mut stale_candidates: Vec<(crate::git::WorktreeInfo, String, Duration)> = Vec::new();
 
     for worktree in &worktrees {
-        if worktree.path == repo.root_dir {
-            println!("{} main (current branch)", "📍".blue());
-        } else if let Some(branch) = &worktree.branch {
-            if repo.is_branch_merged(branch)? {
-                println!("{} {} (merged)", "✅".green(), branch);
-            } else {
-                println!("{} {} (not merged)", "❌".red(), branch);
-            }
+        if handle_main_worktree(repo, worktree) || handle_detached_worktree(worktree) {
+            continue;
         }
+
+        let Some(branch) = worktree.branch.as_ref() else {
+            print_unknown_branch(worktree);
+            continue;
+        };
+
+        let info = collect_branch_info(repo, branch, now)?;
+        if let Some(duration) = print_branch_status(branch, &info, stale_threshold) {
+            stale_candidates.push((worktree.clone(), branch.clone(), duration));
+        }
+    }
+
+    handle_stale_candidates(repo, stale_candidates)
+}
+
+struct BranchInfo {
+    merged: bool,
+    activity: Option<Duration>,
+    activity_label: String,
+}
+
+fn handle_main_worktree(repo: &GitRepo, worktree: &crate::git::WorktreeInfo) -> bool {
+    if worktree.path == repo.root_dir {
+        println!("{} main (current branch)", "📍".blue());
+        return true;
+    }
+    false
+}
+
+fn handle_detached_worktree(worktree: &crate::git::WorktreeInfo) -> bool {
+    if worktree.is_detached {
+        println!(
+            "{} {} (detached HEAD)",
+            "⚠️".yellow(),
+            worktree.path.display()
+        );
+        return true;
+    }
+    false
+}
+
+fn print_unknown_branch(worktree: &crate::git::WorktreeInfo) {
+    println!(
+        "{} {} (unknown branch)",
+        "⚠️".yellow(),
+        worktree.path.display()
+    );
+}
+
+fn collect_branch_info(repo: &GitRepo, branch: &str, now: SystemTime) -> Result<BranchInfo> {
+    let merged = repo.is_branch_merged(branch)?;
+    let activity = repo
+        .get_branch_last_commit_time(branch)?
+        .and_then(|ts| now.duration_since(ts).ok());
+    let activity_label = activity
+        .map(format_duration)
+        .unwrap_or_else(|| "unknown".to_string());
+
+    Ok(BranchInfo {
+        merged,
+        activity,
+        activity_label,
+    })
+}
+
+fn print_branch_status(
+    branch: &str,
+    info: &BranchInfo,
+    stale_threshold: Duration,
+) -> Option<Duration> {
+    if info.merged {
+        print_merged_branch(branch, info);
+        None
+    } else {
+        print_active_branch(branch, info, stale_threshold)
+    }
+}
+
+fn print_merged_branch(branch: &str, info: &BranchInfo) {
+    let warn_old = info
+        .activity
+        .map(|duration| duration >= Duration::from_secs(24 * 60 * 60))
+        .unwrap_or(true);
+
+    if warn_old {
+        println!(
+            "{} {} (merged, last activity {}, ⚠️ >24h)",
+            "✅".green(),
+            branch,
+            info.activity_label
+        );
+    } else {
+        println!(
+            "{} {} (merged, last activity {})",
+            "✅".green(),
+            branch,
+            info.activity_label
+        );
+    }
+}
+
+fn print_active_branch(
+    branch: &str,
+    info: &BranchInfo,
+    stale_threshold: Duration,
+) -> Option<Duration> {
+    let is_stale = info
+        .activity
+        .map(|duration| duration >= stale_threshold)
+        .unwrap_or(false);
+
+    if is_stale {
+        println!(
+            "{} {} (not merged, last activity {} ⚠️ stale)",
+            "❌".red(),
+            branch,
+            info.activity_label
+        );
+        info.activity
+    } else {
+        println!(
+            "{} {} (not merged, last activity {})",
+            "❌".red(),
+            branch,
+            info.activity_label
+        );
+        None
+    }
+}
+
+fn handle_stale_candidates(
+    repo: &GitRepo,
+    stale_candidates: Vec<(crate::git::WorktreeInfo, String, Duration)>,
+) -> Result<()> {
+    if stale_candidates.is_empty() {
+        return Ok(());
+    }
+
+    println!();
+    println!(
+        "{} The following worktrees have seen no activity for 14 days or more:",
+        "🧭".blue()
+    );
+    for (_, branch, duration) in &stale_candidates {
+        println!(
+            "  - {} (last activity {})",
+            branch.cyan(),
+            format_duration(*duration)
+        );
+    }
+    println!();
+
+    for (worktree, branch, duration) in stale_candidates {
+        println!(
+            "{} Branch '{}' has been inactive for {}",
+            "⏳".yellow(),
+            branch,
+            format_duration(duration)
+        );
+        println!("    Worktree path: {}", worktree.path.display());
+        print!("    Remove this worktree? (y/N) ");
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+
+        if input.trim().eq_ignore_ascii_case("y") {
+            remove_worktree_with_branch(repo, &worktree.path, &branch)?;
+        } else {
+            println!("    Skipped");
+        }
+        println!();
     }
 
     Ok(())
@@ -334,12 +503,16 @@ fn remove_worktree_with_branch(repo: &GitRepo, path: &std::path::Path, branch: &
     Ok(())
 }
 
-fn apply_safety_filters(
-    repo: &GitRepo,
-    branches: Vec<String>,
-    _force: bool,
-) -> Result<Vec<String>> {
+fn apply_safety_filters(repo: &GitRepo, branches: Vec<String>, force: bool) -> Result<Vec<String>> {
     if branches.is_empty() {
+        return Ok(branches);
+    }
+
+    if force {
+        println!(
+            "{} --force オプションにより安全フィルタをスキップします",
+            "⚠️".yellow()
+        );
         return Ok(branches);
     }
 
@@ -391,4 +564,25 @@ fn get_branch_head(repo: &GitRepo, branch_name: &str) -> Result<String> {
         .context("Failed to get branch HEAD")?;
 
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn format_duration(duration: Duration) -> String {
+    let secs = duration.as_secs();
+
+    let days = secs / (24 * 60 * 60);
+    if days > 0 {
+        return format!("{days}d ago");
+    }
+
+    let hours = secs / (60 * 60);
+    if hours > 0 {
+        return format!("{hours}h ago");
+    }
+
+    if secs < 60 {
+        "<1m ago".to_string()
+    } else {
+        let minutes = secs / 60;
+        format!("{minutes}m ago")
+    }
 }
