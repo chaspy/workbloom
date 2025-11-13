@@ -503,12 +503,16 @@ fn remove_worktree_with_branch(repo: &GitRepo, path: &std::path::Path, branch: &
     Ok(())
 }
 
-fn apply_safety_filters(
-    repo: &GitRepo,
-    branches: Vec<String>,
-    _force: bool,
-) -> Result<Vec<String>> {
+fn apply_safety_filters(repo: &GitRepo, branches: Vec<String>, force: bool) -> Result<Vec<String>> {
     if branches.is_empty() {
+        return Ok(branches);
+    }
+
+    if force {
+        println!(
+            "{} --force オプションにより安全フィルタをスキップします",
+            "⚠️".yellow()
+        );
         return Ok(branches);
     }
 

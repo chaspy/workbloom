@@ -130,9 +130,9 @@ workbloom cleanup --status
 #### Cleanup Options
 
 - **Default**: Removes only merged worktrees that exist on the remote repository
-- **`--force`**: Skips remote branch checks and removes all merged worktrees (use with caution)
+- **`--force`**: Skips remote branch checks and safety filters, removing all merged worktrees (use with caution)
   - Useful when remote branches have been deleted after merging
-  - Still protects recently created worktrees (within 24 hours)
+  - Still protects recently created worktrees (within 24 hours) via the filesystem age check
 - **`--pattern`**: Removes worktrees matching the specified pattern
 - **`--interactive`**: Prompts for confirmation before removing each worktree
 - **`--status`**: Shows the merge status and last activity of all branches without removing anything, and optionally offers to delete stale ones
