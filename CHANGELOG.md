@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--no-shell` is now legacy human-readable output; `--print-path` remains for explicit path-only output
 - Suppress child process stdout during machine output to keep stdout path-only
 - Remove Claude Code Review GitHub Action workflow
+- Skip cleanup during setup when `WORKBLOOM_DISABLE_CLEANUP` is set (test helper)
 
 ## [0.6.1] - 2025-11-12
 

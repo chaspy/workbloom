@@ -149,6 +149,7 @@ fn test_setup_print_path_output_separation() {
         .args(["setup", "test-branch"])
         .current_dir(repo_path)
         .env("NO_COLOR", "1")
+        .env("WORKBLOOM_DISABLE_CLEANUP", "1")
         .output()
         .expect("Failed to run workbloom setup");
 

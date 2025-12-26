@@ -124,6 +124,10 @@ fn run_setup_script(worktree_path: &std::path::Path) -> Result<()> {
 }
 
 fn run_cleanup_if_exists(repo: &GitRepo, exclude_branch: Option<&str>) -> Result<()> {
+    if std::env::var("WORKBLOOM_DISABLE_CLEANUP").is_ok() {
+        return Ok(());
+    }
+
     crate::outln!("{} Checking for merged branch worktrees to clean up...", "🧹".yellow());
     
     // 常に新しい実装を使用（スクリプトは無視）
