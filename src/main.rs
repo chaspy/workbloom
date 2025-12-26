@@ -60,15 +60,8 @@ fn main() -> Result<()> {
     
     match cli.command {
         Commands::Setup { branch_name, shell, no_shell, print_path } => {
-            let (start_shell, print_path) = if shell {
-                (true, false)
-            } else if no_shell {
-                (false, false)
-            } else if print_path {
-                (false, true)
-            } else {
-                (false, true)
-            };
+            let start_shell = shell;
+            let print_path = print_path || (!shell && !no_shell);
             output::set_machine_output(print_path);
             setup::execute(&branch_name, start_shell, print_path)?;
         }

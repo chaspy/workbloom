@@ -94,9 +94,10 @@ pub fn setup_direnv(worktree_dir: &Path) -> Result<()> {
     crate::outln!("{} Setting up direnv...", "🔐".blue());
     
     if which::which("direnv").is_ok() {
-        Command::new("direnv")
-            .arg("allow")
-            .current_dir(worktree_dir)
+        let mut cmd = Command::new("direnv");
+        cmd.arg("allow")
+            .current_dir(worktree_dir);
+        crate::output::configure_command_for_machine_output(&mut cmd)
             .status()
             .context("Failed to run direnv allow")?;
         

@@ -17,6 +17,7 @@ jobs:
     #   github.event.pull_request.user.login == 'external-contributor' ||
     #   github.event.pull_request.user.login == 'new-developer' ||
     #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+    if: ${{ vars.CLAUDE_REVIEW_ENABLED == 'true' && secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
     
     runs-on: ubuntu-latest
     permissions:
@@ -76,4 +77,3 @@ jobs:
           # if: |
           #   !contains(github.event.pull_request.title, '[skip-review]') &&
           #   !contains(github.event.pull_request.title, '[WIP]')
-

@@ -106,6 +106,60 @@ fn test_help_shows_aliases() {
 }
 
 #[test]
+fn test_setup_print_path_output_separation() {
+    use std::process::Command as StdCommand;
+    use tempfile::TempDir;
+
+    let temp_dir = TempDir::new().unwrap();
+    let repo_path = temp_dir.path();
+
+    StdCommand::new("git")
+        .args(["init"])
+        .current_dir(repo_path)
+        .output()
+        .expect("Failed to init git repo");
+
+    StdCommand::new("git")
+        .args(["config", "user.email", "test@example.com"])
+        .current_dir(repo_path)
+        .output()
+        .expect("Failed to set git email");
+
+    StdCommand::new("git")
+        .args(["config", "user.name", "Test User"])
+        .current_dir(repo_path)
+        .output()
+        .expect("Failed to set git name");
+
+    StdCommand::new("git")
+        .args(["commit", "--allow-empty", "-m", "Initial commit"])
+        .current_dir(repo_path)
+        .output()
+        .expect("Failed to create initial commit");
+
+    StdCommand::new("git")
+        .args(["branch", "-M", "main"])
+        .current_dir(repo_path)
+        .output()
+        .expect("Failed to rename default branch");
+
+    let expected_path = repo_path.join("worktree-test-branch");
+    let output = Command::cargo_bin("workbloom")
+        .unwrap()
+        .args(["setup", "test-branch"])
+        .current_dir(repo_path)
+        .env("NO_COLOR", "1")
+        .output()
+        .expect("Failed to run workbloom setup");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), expected_path.to_string_lossy().as_ref());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Worktree location:"));
+}
+
+#[test]
 fn test_setup_script_detection() {
     use std::fs;
     use tempfile::TempDir;
