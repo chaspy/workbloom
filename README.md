@@ -50,15 +50,20 @@ With this alias and the built-in short aliases, you can use:
 
 #### Auto-change directory after setup
 
+By default, `workbloom setup` prints only the worktree path to stdout (logs go to stderr).
+The CLI cannot change the parent shell's working directory, so use command substitution (or a shell function) to `cd`.
+Use `--print-path` if you want to force path-only output explicitly.
+
+```bash
+cd "$(workbloom setup feature/my-feature)"
+```
+
 To automatically change to the worktree directory after setup, add this function to your `.bashrc` or `.zshrc`:
 
 ```bash
 workbloom-setup() {
-    local output=$(workbloom setup "$@")
-    echo "$output"
-    
-    # Extract the worktree path and change to it
-    local worktree_path=$(echo "$output" | grep "📍 Worktree location:" | sed 's/.*: //')
+    local worktree_path
+    worktree_path="$(workbloom setup "$@")"
     if [ -n "$worktree_path" ] && [ -d "$worktree_path" ]; then
         cd "$worktree_path"
         echo "📂 Changed to worktree directory: $(pwd)"
@@ -67,11 +72,8 @@ workbloom-setup() {
 
 # Or with the alias:
 wb-setup() {
-    local output=$(wb s "$@")
-    echo "$output"
-    
-    # Extract the worktree path and change to it
-    local worktree_path=$(echo "$output" | grep "📍 Worktree location:" | sed 's/.*: //')
+    local worktree_path
+    worktree_path="$(wb s "$@")"
     if [ -n "$worktree_path" ] && [ -d "$worktree_path" ]; then
         cd "$worktree_path"
         echo "📂 Changed to worktree directory: $(pwd)"
@@ -87,11 +89,15 @@ wb-setup() {
 ### Setup a new worktree
 
 ```bash
-# Setup and start a new shell in the worktree directory (default)
+# Setup and print the worktree path (default)
 workbloom setup feature/my-new-feature
 # Or using short alias: wb s feature/my-new-feature
 
-# Setup without starting a shell
+# Setup and start a new shell in the worktree directory
+workbloom setup feature/my-new-feature --shell
+# Or using short alias: wb s feature/my-new-feature --shell
+
+# Legacy: setup without starting a shell, with human-friendly output
 workbloom setup feature/my-new-feature --no-shell
 # Or using short alias: wb s feature/my-new-feature --no-shell
 ```
@@ -100,7 +106,7 @@ This will:
 1. Create a new worktree for the branch (creating the branch if it doesn't exist)
 2. Copy required files from the main repository (.env, .envrc, etc.)
 3. Setup direnv if available
-4. Start a new shell in the worktree directory (unless --no-shell is used)
+4. Start a new shell in the worktree directory (when --shell is used)
 
 ### Clean up worktrees
 

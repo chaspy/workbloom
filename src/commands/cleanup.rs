@@ -32,7 +32,7 @@ pub fn cleanup_merged_worktrees_with_force(
     exclude_branch: Option<&str>,
     force: bool,
 ) -> Result<()> {
-    println!(
+    crate::outln!(
         "{} Cleaning up worktrees for merged branches...",
         "🧹".yellow()
     );
@@ -40,7 +40,7 @@ pub fn cleanup_merged_worktrees_with_force(
     let merged_branches = get_filtered_merged_branches(repo, exclude_branch, force)?;
 
     if merged_branches.is_empty() {
-        println!("{} No merged branches found", "✨".green());
+        crate::outln!("{} No merged branches found", "✨".green());
         return Ok(());
     }
 
@@ -57,7 +57,7 @@ pub fn cleanup_merged_worktrees_with_exclude(
     repo: &GitRepo,
     exclude_branch: Option<&str>,
 ) -> Result<()> {
-    println!(
+    crate::outln!(
         "{} Cleaning up worktrees for merged branches...",
         "🧹".yellow()
     );
@@ -65,7 +65,7 @@ pub fn cleanup_merged_worktrees_with_exclude(
     let merged_branches = get_filtered_merged_branches(repo, exclude_branch, false)?;
 
     if merged_branches.is_empty() {
-        println!("{} No merged branches found", "✨".green());
+        crate::outln!("{} No merged branches found", "✨".green());
         return Ok(());
     }
 
@@ -83,7 +83,7 @@ fn get_filtered_merged_branches(
     exclude_branch: Option<&str>,
     force: bool,
 ) -> Result<Vec<String>> {
-    println!("{} Getting list of merged branches...", "📋".blue());
+    crate::outln!("{} Getting list of merged branches...", "📋".blue());
     let mut merged_branches = repo.get_merged_branches()?;
 
     if let Some(exclude) = exclude_branch {
@@ -97,14 +97,14 @@ fn get_filtered_merged_branches(
 }
 
 fn display_merged_branches(merged_branches: &[String], exclude_branch: Option<&str>) {
-    println!("Found merged branches:");
+    crate::outln!("Found merged branches:");
     for branch in merged_branches {
-        println!("  - {branch}");
+        crate::outln!("  - {branch}");
     }
     if let Some(exclude) = exclude_branch {
-        println!("  (excluding: {})", exclude.cyan());
+        crate::outln!("  (excluding: {})", exclude.cyan());
     }
-    println!();
+    crate::outln!();
 }
 
 fn process_worktrees(repo: &GitRepo, merged_branches: &[String]) -> Result<(usize, usize)> {
@@ -142,7 +142,7 @@ fn process_single_worktree(
     merged_branches: &[String],
 ) -> WorktreeAction {
     if worktree.is_detached {
-        println!(
+        crate::outln!(
             "{} Skipping detached HEAD worktree: {}",
             "⚠️".yellow(),
             worktree.path.display()
@@ -162,7 +162,7 @@ fn process_single_worktree(
             if let Ok(age) = now.duration_since(created) {
                 let hours_old = age.as_secs() / 3600;
                 if hours_old < 24 {
-                    println!(
+                    crate::outln!(
                         "{} Skipping recently created worktree: {} (created {} hours ago)",
                         "⚠️".yellow(),
                         branch,
@@ -184,40 +184,40 @@ fn remove_worktree_and_report(
     worktree: &crate::git::WorktreeInfo,
     branch: &str,
 ) -> WorktreeAction {
-    println!(
+    crate::outln!(
         "{} Removing worktree for merged branch: {}",
         "🗑️".red(),
         branch
     );
-    println!("    Path: {}", worktree.path.display());
+    crate::outln!("    Path: {}", worktree.path.display());
 
     match repo.remove_worktree(&worktree.path, true) {
         Ok(_) => {
-            println!("    {} Successfully removed", "✅".green());
+            crate::outln!("    {} Successfully removed", "✅".green());
             WorktreeAction::Removed
         }
         Err(e) => {
-            println!("    {} Failed to remove: {}", "❌".red(), e);
+            crate::outln!("    {} Failed to remove: {}", "❌".red(), e);
             WorktreeAction::Skipped
         }
     }
 }
 
 fn display_cleanup_summary(cleaned_count: usize, skipped_count: usize) {
-    println!();
-    println!("{} Summary:", "📊".blue());
-    println!("  - Cleaned up: {cleaned_count} worktree(s)");
-    println!("  - Skipped: {skipped_count} worktree(s)");
+    crate::outln!();
+    crate::outln!("{} Summary:", "📊".blue());
+    crate::outln!("  - Cleaned up: {cleaned_count} worktree(s)");
+    crate::outln!("  - Skipped: {skipped_count} worktree(s)");
 
     if cleaned_count == 0 && skipped_count == 0 {
-        println!();
-        println!(
+        crate::outln!();
+        crate::outln!(
             "{} No merged branch worktrees found to clean up",
             "✨".green()
         );
     } else {
-        println!();
-        println!("{} Cleanup completed!", "✅".green().bold());
+        crate::outln!();
+        crate::outln!("{} Cleanup completed!", "✅".green().bold());
     }
 }
 
@@ -226,8 +226,8 @@ fn cleanup_merged_only(repo: &GitRepo, force: bool) -> Result<()> {
 }
 
 fn cleanup_by_pattern(repo: &GitRepo, pattern: &str) -> Result<()> {
-    println!("Removing worktrees matching pattern: {}", pattern.cyan());
-    println!();
+    crate::outln!("Removing worktrees matching pattern: {}", pattern.cyan());
+    crate::outln!();
 
     let worktrees = repo.list_worktrees()?;
     let mut removed_count = 0;
@@ -245,7 +245,7 @@ fn cleanup_by_pattern(repo: &GitRepo, pattern: &str) -> Result<()> {
         }
     }
 
-    println!(
+    crate::outln!(
         "{} Removed {} worktree(s) matching pattern '{}'",
         "✅".green(),
         removed_count,
@@ -255,8 +255,8 @@ fn cleanup_by_pattern(repo: &GitRepo, pattern: &str) -> Result<()> {
 }
 
 fn interactive_cleanup(repo: &GitRepo) -> Result<()> {
-    println!("Interactive worktree removal");
-    println!();
+    crate::outln!("Interactive worktree removal");
+    crate::outln!();
 
     let worktrees = repo.list_worktrees()?;
 
@@ -266,8 +266,8 @@ fn interactive_cleanup(repo: &GitRepo) -> Result<()> {
         }
 
         if let Some(branch) = &worktree.branch {
-            println!("Worktree: {}", worktree.path.display());
-            println!("Branch: {}", branch.cyan());
+            crate::outln!("Worktree: {}", worktree.path.display());
+            crate::outln!("Branch: {}", branch.cyan());
 
             print!("Remove this worktree? (y/n) ");
             io::stdout().flush()?;
@@ -278,9 +278,9 @@ fn interactive_cleanup(repo: &GitRepo) -> Result<()> {
             if input.trim().to_lowercase() == "y" {
                 remove_worktree_with_branch(repo, &worktree.path, branch)?;
             } else {
-                println!("  Skipped");
+                crate::outln!("  Skipped");
             }
-            println!();
+            crate::outln!();
         }
     }
 
@@ -288,19 +288,19 @@ fn interactive_cleanup(repo: &GitRepo) -> Result<()> {
 }
 
 fn show_status(repo: &GitRepo) -> Result<()> {
-    println!("Checking merge status of all branches...");
-    println!();
+    crate::outln!("Checking merge status of all branches...");
+    crate::outln!();
 
     let worktrees = repo.list_worktrees()?;
 
     for worktree in &worktrees {
         if worktree.path == repo.root_dir {
-            println!("{} main (current branch)", "📍".blue());
+            crate::outln!("{} main (current branch)", "📍".blue());
         } else if let Some(branch) = &worktree.branch {
             if repo.is_branch_merged(branch)? {
-                println!("{} {} (merged)", "✅".green(), branch);
+                crate::outln!("{} {} (merged)", "✅".green(), branch);
             } else {
-                println!("{} {} (not merged)", "❌".red(), branch);
+                crate::outln!("{} {} (not merged)", "❌".red(), branch);
             }
         }
     }
@@ -309,25 +309,25 @@ fn show_status(repo: &GitRepo) -> Result<()> {
 }
 
 fn remove_worktree_with_branch(repo: &GitRepo, path: &std::path::Path, branch: &str) -> Result<()> {
-    println!("  Removing worktree: {}", path.display());
+    crate::outln!("  Removing worktree: {}", path.display());
 
     if let Err(e) = repo.remove_worktree(path, true) {
-        println!("  {} Failed to remove worktree: {}", "❌".red(), e);
+        crate::outln!("  {} Failed to remove worktree: {}", "❌".red(), e);
         return Ok(());
     }
 
-    println!("  {} Worktree removed successfully", "✅".green());
+    crate::outln!("  {} Worktree removed successfully", "✅".green());
 
     if repo.branch_exists(branch)? {
         if let Err(e) = repo.delete_branch(branch) {
-            println!(
+            crate::outln!(
                 "  {} Could not delete branch '{}': {}",
                 "⚠️".yellow(),
                 branch,
                 e
             );
         } else {
-            println!("  {} Branch '{}' deleted", "✅".green(), branch);
+            crate::outln!("  {} Branch '{}' deleted", "✅".green(), branch);
         }
     }
 
@@ -359,7 +359,7 @@ fn filter_identical_commits(repo: &GitRepo, branches: Vec<String>) -> Result<Vec
         match get_branch_head(repo, &branch) {
             Ok(branch_head) => {
                 if branch_head == main_head {
-                    println!(
+                    crate::outln!(
                         "  {} Skipping new branch (same as main): {}",
                         "🔒".yellow(),
                         branch
@@ -368,7 +368,7 @@ fn filter_identical_commits(repo: &GitRepo, branches: Vec<String>) -> Result<Vec
                 }
             }
             Err(_) => {
-                println!(
+                crate::outln!(
                     "  {} Skipping branch (cannot get HEAD): {}",
                     "⚠️".yellow(),
                     branch

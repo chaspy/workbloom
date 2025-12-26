@@ -77,9 +77,10 @@ impl GitRepo {
 
     pub fn add_worktree(&self, worktree_path: &Path, branch_name: &str) -> Result<()> {
         validate_branch_name(branch_name)?;
-        Command::new("git")
-            .args(["worktree", "add", worktree_path.to_str().unwrap(), branch_name])
-            .current_dir(&self.root_dir)
+        let mut cmd = Command::new("git");
+        cmd.args(["worktree", "add", worktree_path.to_str().unwrap(), branch_name])
+            .current_dir(&self.root_dir);
+        crate::output::configure_command_for_machine_output(&mut cmd)
             .status()
             .context("Failed to create worktree")?;
         
@@ -122,9 +123,10 @@ impl GitRepo {
         }
         args.push(worktree_path.to_str().unwrap());
         
-        Command::new("git")
-            .args(&args)
-            .current_dir(&self.root_dir)
+        let mut cmd = Command::new("git");
+        cmd.args(&args)
+            .current_dir(&self.root_dir);
+        crate::output::configure_command_for_machine_output(&mut cmd)
             .status()
             .context("Failed to remove worktree")?;
         

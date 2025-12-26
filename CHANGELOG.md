@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2025-12-26
+
+### Added
+- `--shell` option to start a sub-shell in the worktree directory
+
+### Changed
+- Default `workbloom setup` behavior now prints the worktree path to stdout (logs go to stderr) for shell integration
+- `--no-shell` is now legacy human-readable output; `--print-path` remains for explicit path-only output
+- Suppress child process stdout during machine output to keep stdout path-only
+- Remove Claude Code Review GitHub Action workflow
+
 ## [0.6.1] - 2025-11-12
 
 ### Removed
