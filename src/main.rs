@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use workbloom::commands::{cleanup, setup};
+use workbloom::output;
 
 #[derive(Parser)]
 #[command(
@@ -25,6 +26,9 @@ enum Commands {
         
         #[arg(long, help = "Skip starting a new shell (default is to start shell)")]
         no_shell: bool,
+
+        #[arg(long, help = "Print only the worktree path to stdout (implies --no-shell)")]
+        print_path: bool,
     },
     
     #[command(about = "Clean up worktrees", visible_alias = "c")]
@@ -52,8 +56,10 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     
     match cli.command {
-        Commands::Setup { branch_name, no_shell } => {
-            setup::execute(&branch_name, !no_shell)?;
+        Commands::Setup { branch_name, no_shell, print_path } => {
+            output::set_machine_output(print_path);
+            let start_shell = !no_shell && !print_path;
+            setup::execute(&branch_name, start_shell, print_path)?;
         }
         Commands::Cleanup {
             merged,

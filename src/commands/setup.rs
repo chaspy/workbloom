@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use crate::{config::Config, file_ops, git::GitRepo};
 
-pub fn execute(branch_name: &str, start_shell: bool) -> Result<()> {
+pub fn execute(branch_name: &str, start_shell: bool, print_path: bool) -> Result<()> {
     let repo = GitRepo::new()?;
     let config = Config::load_from_file(&repo.root_dir)
         .unwrap_or_else(|_| Config::default());
@@ -15,43 +15,48 @@ pub fn execute(branch_name: &str, start_shell: bool) -> Result<()> {
     let worktree_dir_name = format!("worktree-{}", branch_name.replace('/', "-"));
     let worktree_path = repo.root_dir.join(&worktree_dir_name);
     
-    println!("{} Setting up git worktree...", "🌲".green());
-    println!("Branch: {}", branch_name.cyan());
-    println!("Worktree directory: {}", worktree_path.display());
-    println!();
+    crate::outln!("{} Setting up git worktree...", "🌲".green());
+    crate::outln!("Branch: {}", branch_name.cyan());
+    crate::outln!("Worktree directory: {}", worktree_path.display());
+    crate::outln!();
     
     run_cleanup_if_exists(&repo, Some(branch_name))?;
     
-    let pb = ProgressBar::new(4);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg}")
-            .unwrap()
-            .progress_chars("##-"),
-    );
-    pb.enable_steady_tick(Duration::from_millis(100));
+    let pb = if print_path {
+        ProgressBar::hidden()
+    } else {
+        let pb = ProgressBar::new(4);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg}")
+                .unwrap()
+                .progress_chars("##-"),
+        );
+        pb.enable_steady_tick(Duration::from_millis(100));
+        pb
+    };
     
     pb.set_message("Checking branch...");
     if !repo.branch_exists(branch_name)? {
         // Check if branch exists on remote
         if repo.remote_branch_exists(branch_name)? {
-            println!("{} Branch '{}' exists on remote. Fetching and creating tracking branch...", "🌐".blue(), branch_name);
+            crate::outln!("{} Branch '{}' exists on remote. Fetching and creating tracking branch...", "🌐".blue(), branch_name);
             repo.fetch_remote_branch(branch_name)?;
             repo.create_tracking_branch(branch_name)?;
         } else {
-            println!("{} Branch '{}' does not exist. Creating it...", "📝".yellow(), branch_name);
+            crate::outln!("{} Branch '{}' does not exist. Creating it...", "📝".yellow(), branch_name);
             repo.create_branch(branch_name)?;
         }
     }
     pb.inc(1);
     
     pb.set_message("Creating worktree...");
-    println!("{} Creating git worktree...", "🔧".blue());
+    crate::outln!("{} Creating git worktree...", "🔧".blue());
     repo.add_worktree(&worktree_path, branch_name)?;
     pb.inc(1);
     
     pb.set_message("Copying files...");
-    println!("{} Copying required files...", "📦".blue());
+    crate::outln!("{} Copying required files...", "📦".blue());
     file_ops::copy_required_files(&repo.root_dir, &worktree_path, &config)?;
     pb.inc(1);
     
@@ -64,19 +69,21 @@ pub fn execute(branch_name: &str, start_shell: bool) -> Result<()> {
     
     pb.finish_with_message("Setup completed!");
     
-    println!();
-    println!("{} Git worktree setup completed!", "✅".green().bold());
-    println!("{} Worktree location: {}", "📍".blue(), worktree_path.display());
-    println!();
+    crate::outln!();
+    crate::outln!("{} Git worktree setup completed!", "✅".green().bold());
+    crate::outln!("{} Worktree location: {}", "📍".blue(), worktree_path.display());
+    crate::outln!();
     
-    if start_shell {
-        println!("{} Starting new shell in worktree directory...", "📂".blue());
+    if print_path {
+        println!("{}", worktree_path.display());
+    } else if start_shell {
+        crate::outln!("{} Starting new shell in worktree directory...", "📂".blue());
         start_shell_in_directory(&worktree_path)?;
     } else {
-        println!("{} Moving to worktree directory...", "📂".blue());
-        println!("cd {}", worktree_path.display());
-        println!();
-        println!("💡 Tip: Default behavior now starts a shell. Use 'workbloom setup {branch_name} --no-shell' to skip");
+        crate::outln!("{} Moving to worktree directory...", "📂".blue());
+        crate::outln!("cd {}", worktree_path.display());
+        crate::outln!();
+        crate::outln!("💡 Tip: Default behavior now starts a shell. Use 'workbloom setup {branch_name} --no-shell' to skip");
     }
     
     Ok(())
@@ -86,7 +93,7 @@ fn run_setup_script(worktree_path: &std::path::Path) -> Result<()> {
     let setup_script_path = worktree_path.join(".workbloom-setup.sh");
     
     if setup_script_path.exists() {
-        println!("{} Found .workbloom-setup.sh, executing...", "🚀".cyan());
+        crate::outln!("{} Found .workbloom-setup.sh, executing...", "🚀".cyan());
         
         // Make the script executable
         #[cfg(unix)]
@@ -109,7 +116,7 @@ fn run_setup_script(worktree_path: &std::path::Path) -> Result<()> {
             eprintln!("{} Warning: .workbloom-setup.sh failed: {}", "⚠️".yellow(), stderr);
             // Don't fail the entire setup if the script fails
         } else {
-            println!("{} Setup script executed successfully", "✨".green());
+            crate::outln!("{} Setup script executed successfully", "✨".green());
         }
     }
     
@@ -117,12 +124,12 @@ fn run_setup_script(worktree_path: &std::path::Path) -> Result<()> {
 }
 
 fn run_cleanup_if_exists(repo: &GitRepo, exclude_branch: Option<&str>) -> Result<()> {
-    println!("{} Checking for merged branch worktrees to clean up...", "🧹".yellow());
+    crate::outln!("{} Checking for merged branch worktrees to clean up...", "🧹".yellow());
     
     // 常に新しい実装を使用（スクリプトは無視）
     crate::commands::cleanup::cleanup_merged_worktrees_with_exclude(repo, exclude_branch)?;
     
-    println!();
+    crate::outln!();
     Ok(())
 }
 

@@ -50,15 +50,14 @@ With this alias and the built-in short aliases, you can use:
 
 #### Auto-change directory after setup
 
+`--print-path` outputs only the worktree path on stdout (progress logs go to stderr), which makes shell integration reliable.
+
 To automatically change to the worktree directory after setup, add this function to your `.bashrc` or `.zshrc`:
 
 ```bash
 workbloom-setup() {
-    local output=$(workbloom setup "$@")
-    echo "$output"
-    
-    # Extract the worktree path and change to it
-    local worktree_path=$(echo "$output" | grep "📍 Worktree location:" | sed 's/.*: //')
+    local worktree_path
+    worktree_path="$(workbloom setup "$@" --print-path)"
     if [ -n "$worktree_path" ] && [ -d "$worktree_path" ]; then
         cd "$worktree_path"
         echo "📂 Changed to worktree directory: $(pwd)"
@@ -67,11 +66,8 @@ workbloom-setup() {
 
 # Or with the alias:
 wb-setup() {
-    local output=$(wb s "$@")
-    echo "$output"
-    
-    # Extract the worktree path and change to it
-    local worktree_path=$(echo "$output" | grep "📍 Worktree location:" | sed 's/.*: //')
+    local worktree_path
+    worktree_path="$(wb s "$@" --print-path)"
     if [ -n "$worktree_path" ] && [ -d "$worktree_path" ]; then
         cd "$worktree_path"
         echo "📂 Changed to worktree directory: $(pwd)"
@@ -94,13 +90,17 @@ workbloom setup feature/my-new-feature
 # Setup without starting a shell
 workbloom setup feature/my-new-feature --no-shell
 # Or using short alias: wb s feature/my-new-feature --no-shell
+
+# Print only the worktree path (for shell integration)
+workbloom setup feature/my-new-feature --print-path
+# Or using short alias: wb s feature/my-new-feature --print-path
 ```
 
 This will:
 1. Create a new worktree for the branch (creating the branch if it doesn't exist)
 2. Copy required files from the main repository (.env, .envrc, etc.)
 3. Setup direnv if available
-4. Start a new shell in the worktree directory (unless --no-shell is used)
+4. Start a new shell in the worktree directory (unless --no-shell or --print-path is used)
 
 ### Clean up worktrees
 

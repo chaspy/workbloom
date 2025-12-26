@@ -25,7 +25,7 @@ fn copy_item(main_dir: &Path, worktree_dir: &Path, item: &str) -> Result<()> {
     let dest_path = worktree_dir.join(item);
     
     if !source_path.exists() {
-        println!("{} Warning: {} not found in main directory", "⚠️".yellow(), item);
+        crate::outln!("{} Warning: {} not found in main directory", "⚠️".yellow(), item);
         return Ok(());
     }
     
@@ -36,11 +36,11 @@ fn copy_item(main_dir: &Path, worktree_dir: &Path, item: &str) -> Result<()> {
     
     if source_path.is_dir() {
         copy_dir_all(&source_path, &dest_path)?;
-        println!("{} Copied directory: {}", "📁".green(), item);
+        crate::outln!("{} Copied directory: {}", "📁".green(), item);
     } else {
         fs::copy(&source_path, &dest_path)
             .with_context(|| format!("Failed to copy {item}"))?;
-        println!("{} Copied file: {}", "📄".green(), item);
+        crate::outln!("{} Copied file: {}", "📄".green(), item);
     }
     
     Ok(())
@@ -51,7 +51,7 @@ fn copy_claude_settings(main_dir: &Path, worktree_dir: &Path, config: &Config) -
     let claude_dest = worktree_dir.join(".claude");
     
     if !claude_source.exists() {
-        println!("{} Warning: .claude directory not found in main directory", "⚠️".yellow());
+        crate::outln!("{} Warning: .claude directory not found in main directory", "⚠️".yellow());
         return Ok(());
     }
     
@@ -64,7 +64,7 @@ fn copy_claude_settings(main_dir: &Path, worktree_dir: &Path, config: &Config) -
             let dest_file = claude_dest.join(file);
             fs::copy(&source_file, &dest_file)
                 .with_context(|| format!("Failed to copy .claude/{file}"))?;
-            println!("{} Copied file: .claude/{}", "📄".green(), file);
+            crate::outln!("{} Copied file: .claude/{}", "📄".green(), file);
         }
     }
     
@@ -91,7 +91,7 @@ pub fn setup_direnv(worktree_dir: &Path) -> Result<()> {
         return Ok(());
     }
     
-    println!("{} Setting up direnv...", "🔐".blue());
+    crate::outln!("{} Setting up direnv...", "🔐".blue());
     
     if which::which("direnv").is_ok() {
         Command::new("direnv")
@@ -100,11 +100,10 @@ pub fn setup_direnv(worktree_dir: &Path) -> Result<()> {
             .status()
             .context("Failed to run direnv allow")?;
         
-        println!("{} direnv allowed for worktree", "✅".green());
+        crate::outln!("{} direnv allowed for worktree", "✅".green());
     } else {
-        println!("{} direnv not found. Please run 'direnv allow' manually in the worktree directory", "⚠️".yellow());
+        crate::outln!("{} direnv not found. Please run 'direnv allow' manually in the worktree directory", "⚠️".yellow());
     }
     
     Ok(())
 }
-
