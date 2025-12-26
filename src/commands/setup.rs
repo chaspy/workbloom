@@ -83,7 +83,7 @@ pub fn execute(branch_name: &str, start_shell: bool, print_path: bool) -> Result
         crate::outln!("{} Moving to worktree directory...", "📂".blue());
         crate::outln!("cd {}", worktree_path.display());
         crate::outln!();
-        crate::outln!("💡 Tip: Default behavior now starts a shell. Use 'workbloom setup {branch_name} --no-shell' to skip");
+        crate::outln!("💡 Tip: Default behavior prints the worktree path. Use 'workbloom setup {branch_name} --shell' to start a shell");
     }
     
     Ok(())

@@ -23,11 +23,14 @@ enum Commands {
     Setup {
         #[arg(help = "The branch name for the worktree")]
         branch_name: String,
-        
-        #[arg(long, help = "Skip starting a new shell (default is to start shell)")]
+
+        #[arg(long, conflicts_with_all = &["no_shell", "print_path"], help = "Start a new shell in the worktree directory")]
+        shell: bool,
+
+        #[arg(long, conflicts_with = "print_path", help = "Skip starting a new shell and print human-friendly output (legacy)")]
         no_shell: bool,
 
-        #[arg(long, help = "Print only the worktree path to stdout (implies --no-shell)")]
+        #[arg(long, conflicts_with = "no_shell", help = "Print only the worktree path to stdout (default)")]
         print_path: bool,
     },
     
@@ -56,9 +59,17 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     
     match cli.command {
-        Commands::Setup { branch_name, no_shell, print_path } => {
+        Commands::Setup { branch_name, shell, no_shell, print_path } => {
+            let (start_shell, print_path) = if shell {
+                (true, false)
+            } else if no_shell {
+                (false, false)
+            } else if print_path {
+                (false, true)
+            } else {
+                (false, true)
+            };
             output::set_machine_output(print_path);
-            let start_shell = !no_shell && !print_path;
             setup::execute(&branch_name, start_shell, print_path)?;
         }
         Commands::Cleanup {
