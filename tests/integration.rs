@@ -143,13 +143,18 @@ fn test_setup_print_path_output_separation() {
         .output()
         .expect("Failed to rename default branch");
 
+    StdCommand::new("git")
+        .args(["remote", "add", "origin", "."])
+        .current_dir(repo_path)
+        .output()
+        .expect("Failed to add origin remote");
+
     let expected_path = repo_path.join("worktree-test-branch");
     let output = Command::cargo_bin("workbloom")
         .unwrap()
         .args(["setup", "test-branch"])
         .current_dir(repo_path)
         .env("NO_COLOR", "1")
-        .env("WORKBLOOM_DISABLE_CLEANUP", "1")
         .output()
         .expect("Failed to run workbloom setup");
 
