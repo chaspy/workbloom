@@ -50,8 +50,13 @@ With this alias and the built-in short aliases, you can use:
 
 #### Auto-change directory after setup
 
-デフォルトで worktree のパスのみを stdout に出力します（ログは stderr）。
-シェル側で `cd` しやすくなります。明示したい場合は `--print-path` も使えます。
+By default, `workbloom setup` prints only the worktree path to stdout (logs go to stderr).
+The CLI cannot change the parent shell's working directory, so use command substitution (or a shell function) to `cd`.
+Use `--print-path` if you want to force path-only output explicitly.
+
+```bash
+cd "$(workbloom setup feature/my-feature)"
+```
 
 To automatically change to the worktree directory after setup, add this function to your `.bashrc` or `.zshrc`:
 
