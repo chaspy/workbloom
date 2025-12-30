@@ -3,7 +3,7 @@ use colored::*;
 use std::io::{self, Write};
 use std::time::SystemTime;
 
-use crate::git::GitRepo;
+use crate::{git::GitRepo, tmux};
 
 pub fn execute(mode: CleanupMode) -> Result<()> {
     let repo = GitRepo::new()?;
@@ -194,6 +194,7 @@ fn remove_worktree_and_report(
     match repo.remove_worktree(&worktree.path, true) {
         Ok(_) => {
             crate::outln!("    {} Successfully removed", "✅".green());
+            stop_tmux_session(&worktree.path);
             WorktreeAction::Removed
         }
         Err(e) => {
@@ -317,6 +318,7 @@ fn remove_worktree_with_branch(repo: &GitRepo, path: &std::path::Path, branch: &
     }
 
     crate::outln!("  {} Worktree removed successfully", "✅".green());
+    stop_tmux_session(path);
 
     if repo.branch_exists(branch)? {
         if let Err(e) = repo.delete_branch(branch) {
@@ -391,4 +393,21 @@ fn get_branch_head(repo: &GitRepo, branch_name: &str) -> Result<String> {
         .context("Failed to get branch HEAD")?;
 
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn stop_tmux_session(worktree_path: &std::path::Path) {
+    if let Some(dir_name) = worktree_path.file_name().and_then(|n| n.to_str()) {
+        let session_name = tmux::sanitize_session_name(dir_name);
+
+        match tmux::kill_session(&session_name) {
+            Ok(true) => crate::outln!("    {} Closed tmux session: {}", "🌀".blue(), session_name),
+            Ok(false) => crate::outln!("    {} No tmux session to close", "ℹ️".blue()),
+            Err(e) => crate::outln!(
+                "    {} Failed to close tmux session '{}': {}",
+                "⚠️".yellow(),
+                session_name,
+                e
+            ),
+        }
+    }
 }

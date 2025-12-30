@@ -5,96 +5,140 @@ use std::env;
 use std::process::Command;
 use std::time::Duration;
 
-use crate::{config::Config, file_ops, git::GitRepo};
+use crate::{config::Config, file_ops, git::GitRepo, tmux};
 
-pub fn execute(branch_name: &str, start_shell: bool, print_path: bool) -> Result<()> {
+pub fn execute(
+    branch_name: &str,
+    start_shell: bool,
+    use_tmux: bool,
+    print_path: bool,
+) -> Result<()> {
     let repo = GitRepo::new()?;
-    let config = Config::load_from_file(&repo.root_dir)
-        .unwrap_or_else(|_| Config::default());
-    
+    let config = Config::load_from_file(&repo.root_dir).unwrap_or_else(|_| Config::default());
+
     let worktree_dir_name = format!("worktree-{}", branch_name.replace('/', "-"));
     let worktree_path = repo.root_dir.join(&worktree_dir_name);
-    
+    let tmux_session_name = tmux::sanitize_session_name(&worktree_dir_name);
+
     crate::outln!("{} Setting up git worktree...", "🌲".green());
     crate::outln!("Branch: {}", branch_name.cyan());
     crate::outln!("Worktree directory: {}", worktree_path.display());
     crate::outln!();
-    
+
     run_cleanup_if_exists(&repo, Some(branch_name))?;
-    
+
     let pb = if print_path {
         ProgressBar::hidden()
     } else {
         let pb = ProgressBar::new(4);
         pb.set_style(
             ProgressStyle::default_bar()
-                .template("{spinner:.green} [{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg}")
+                .template(
+                    "{spinner:.green} [{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg}",
+                )
                 .unwrap()
                 .progress_chars("##-"),
         );
         pb.enable_steady_tick(Duration::from_millis(100));
         pb
     };
-    
+
     pb.set_message("Checking branch...");
     if !repo.branch_exists(branch_name)? {
         // Check if branch exists on remote
         if repo.remote_branch_exists(branch_name)? {
-            crate::outln!("{} Branch '{}' exists on remote. Fetching and creating tracking branch...", "🌐".blue(), branch_name);
+            crate::outln!(
+                "{} Branch '{}' exists on remote. Fetching and creating tracking branch...",
+                "🌐".blue(),
+                branch_name
+            );
             repo.fetch_remote_branch(branch_name)?;
             repo.create_tracking_branch(branch_name)?;
         } else {
-            crate::outln!("{} Branch '{}' does not exist. Creating it...", "📝".yellow(), branch_name);
+            crate::outln!(
+                "{} Branch '{}' does not exist. Creating it...",
+                "📝".yellow(),
+                branch_name
+            );
             repo.create_branch(branch_name)?;
         }
     }
     pb.inc(1);
-    
+
     pb.set_message("Creating worktree...");
     crate::outln!("{} Creating git worktree...", "🔧".blue());
     repo.add_worktree(&worktree_path, branch_name)?;
     pb.inc(1);
-    
+
     pb.set_message("Copying files...");
     crate::outln!("{} Copying required files...", "📦".blue());
     file_ops::copy_required_files(&repo.root_dir, &worktree_path, &config)?;
     pb.inc(1);
-    
+
     pb.set_message("Running setup script...");
     run_setup_script(&worktree_path)?;
-    
+
     pb.set_message("Setting up direnv...");
     file_ops::setup_direnv(&worktree_path)?;
     pb.inc(1);
-    
+
     pb.finish_with_message("Setup completed!");
-    
+
     crate::outln!();
     crate::outln!("{} Git worktree setup completed!", "✅".green().bold());
-    crate::outln!("{} Worktree location: {}", "📍".blue(), worktree_path.display());
+    crate::outln!(
+        "{} Worktree location: {}",
+        "📍".blue(),
+        worktree_path.display()
+    );
     crate::outln!();
-    
+
     if print_path {
         println!("{}", worktree_path.display());
     } else if start_shell {
-        crate::outln!("{} Starting new shell in worktree directory...", "📂".blue());
-        start_shell_in_directory(&worktree_path)?;
+        crate::outln!("{} Starting worktree session...", "📂".blue());
+        let mut started = false;
+
+        if use_tmux {
+            if tmux::is_available() {
+                match start_tmux_session(&tmux_session_name, &worktree_path) {
+                    Ok(_) => started = true,
+                    Err(err) => {
+                        crate::outln!(
+                            "{} tmux session failed (falling back to shell): {}",
+                            "⚠️".yellow(),
+                            err
+                        );
+                    }
+                }
+            } else {
+                crate::outln!(
+                    "{} tmux is not available. Starting a normal shell instead...",
+                    "⚠️".yellow()
+                );
+            }
+        }
+
+        if !started {
+            crate::outln!("{} Launching shell in worktree directory...", "📂".blue());
+            start_shell_in_directory(&worktree_path)?;
+        }
     } else {
         crate::outln!("{} Moving to worktree directory...", "📂".blue());
         crate::outln!("cd {}", worktree_path.display());
         crate::outln!();
         crate::outln!("💡 Tip: Default behavior prints the worktree path. Use 'workbloom setup {branch_name} --shell' to start a shell");
     }
-    
+
     Ok(())
 }
 
 fn run_setup_script(worktree_path: &std::path::Path) -> Result<()> {
     let setup_script_path = worktree_path.join(".workbloom-setup.sh");
-    
+
     if setup_script_path.exists() {
         crate::outln!("{} Found .workbloom-setup.sh, executing...", "🚀".cyan());
-        
+
         // Make the script executable
         #[cfg(unix)]
         {
@@ -103,43 +147,71 @@ fn run_setup_script(worktree_path: &std::path::Path) -> Result<()> {
             perms.set_mode(0o755);
             std::fs::set_permissions(&setup_script_path, perms)?;
         }
-        
+
         // Execute the script
         let output = Command::new("bash")
             .arg(&setup_script_path)
             .current_dir(worktree_path)
             .output()
             .context("Failed to execute .workbloom-setup.sh")?;
-        
+
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!("{} Warning: .workbloom-setup.sh failed: {}", "⚠️".yellow(), stderr);
+            eprintln!(
+                "{} Warning: .workbloom-setup.sh failed: {}",
+                "⚠️".yellow(),
+                stderr
+            );
             // Don't fail the entire setup if the script fails
         } else {
             crate::outln!("{} Setup script executed successfully", "✨".green());
         }
     }
-    
+
     Ok(())
 }
 
 fn run_cleanup_if_exists(repo: &GitRepo, exclude_branch: Option<&str>) -> Result<()> {
-    crate::outln!("{} Checking for merged branch worktrees to clean up...", "🧹".yellow());
-    
+    crate::outln!(
+        "{} Checking for merged branch worktrees to clean up...",
+        "🧹".yellow()
+    );
+
     // 常に新しい実装を使用（スクリプトは無視）
     crate::commands::cleanup::cleanup_merged_worktrees_with_exclude(repo, exclude_branch)?;
-    
+
     crate::outln!();
     Ok(())
 }
 
+fn start_tmux_session(session_name: &str, worktree_path: &std::path::Path) -> Result<()> {
+    if tmux::session_exists(session_name)? {
+        crate::outln!(
+            "{} Re-attaching to existing tmux session: {}",
+            "🌀".blue(),
+            session_name
+        );
+        tmux::attach_session(session_name)?;
+        return Ok(());
+    }
+
+    crate::outln!(
+        "{} Creating new tmux session: {} (dir: {})",
+        "🌀".blue(),
+        session_name,
+        worktree_path.display()
+    );
+    tmux::create_session(session_name, worktree_path)?;
+    tmux::attach_session(session_name)
+}
+
 fn start_shell_in_directory(worktree_path: &std::path::Path) -> Result<()> {
     let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
-    
+
     Command::new(&shell)
         .current_dir(worktree_path)
         .status()
         .context("Failed to start shell in worktree directory")?;
-    
+
     Ok(())
 }

@@ -19,7 +19,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    #[command(about = "Set up a new git worktree with automatic file copying", visible_alias = "s")]
+    #[command(
+        about = "Set up a new git worktree with automatic file copying",
+        visible_alias = "s"
+    )]
     Setup {
         #[arg(help = "The branch name for the worktree")]
         branch_name: String,
@@ -27,43 +30,63 @@ enum Commands {
         #[arg(long, conflicts_with_all = &["no_shell", "print_path"], help = "Start a new shell in the worktree directory")]
         shell: bool,
 
-        #[arg(long, conflicts_with = "print_path", help = "Skip starting a new shell and print human-friendly output (legacy)")]
+        #[arg(
+            long,
+            conflicts_with = "print_path",
+            help = "Skip starting a new shell and print human-friendly output (legacy)"
+        )]
         no_shell: bool,
 
-        #[arg(long, conflicts_with = "no_shell", help = "Print only the worktree path to stdout (default)")]
+        #[arg(long, help = "Disable tmux session management when starting a shell")]
+        no_tmux: bool,
+
+        #[arg(
+            long,
+            conflicts_with = "no_shell",
+            help = "Print only the worktree path to stdout (default)"
+        )]
         print_path: bool,
     },
-    
+
     #[command(about = "Clean up worktrees", visible_alias = "c")]
     Cleanup {
         #[arg(long, conflicts_with_all = &["pattern", "interactive", "status"], help = "Remove only merged worktrees")]
         merged: bool,
-        
+
         #[arg(long, value_name = "PATTERN", conflicts_with_all = &["merged", "interactive", "status"], help = "Remove worktrees matching pattern")]
         pattern: Option<String>,
-        
+
         #[arg(long, conflicts_with_all = &["merged", "pattern", "status"], help = "Interactive removal")]
         interactive: bool,
-        
+
         #[arg(long, conflicts_with_all = &["merged", "pattern", "interactive"], help = "Show merge status of all branches")]
         status: bool,
 
-        #[arg(long, help = "Force cleanup without remote branch checks (use with --merged). Still protects recently created worktrees")]
+        #[arg(
+            long,
+            help = "Force cleanup without remote branch checks (use with --merged). Still protects recently created worktrees"
+        )]
         force: bool,
     },
 }
 
 fn main() -> Result<()> {
     colored::control::set_override(should_use_color());
-    
+
     let cli = Cli::parse();
-    
+
     match cli.command {
-        Commands::Setup { branch_name, shell, no_shell, print_path } => {
+        Commands::Setup {
+            branch_name,
+            shell,
+            no_shell,
+            no_tmux,
+            print_path,
+        } => {
             let start_shell = shell;
             let print_path = print_path || (!shell && !no_shell);
             output::set_machine_output(print_path);
-            setup::execute(&branch_name, start_shell, print_path)?;
+            setup::execute(&branch_name, start_shell, !no_tmux, print_path)?;
         }
         Commands::Cleanup {
             merged,
@@ -81,16 +104,18 @@ fn main() -> Result<()> {
             } else {
                 cleanup::CleanupMode::Status
             };
-            
+
             cleanup::execute(mode)?;
         }
     }
-    
+
     Ok(())
 }
 
 fn should_use_color() -> bool {
-    if std::env::var("NO_COLOR").is_ok() || std::env::var("CLICOLOR").map(|v| v == "0").unwrap_or(false) {
+    if std::env::var("NO_COLOR").is_ok()
+        || std::env::var("CLICOLOR").map(|v| v == "0").unwrap_or(false)
+    {
         return false;
     }
     true
