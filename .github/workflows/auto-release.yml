@@ -236,7 +236,7 @@ jobs:
           mv ${{ matrix.asset_name }}.tar.gz ../../../
       
       - name: Upload Release Asset
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.check-and-tag.outputs.tag }}
           files: ./${{ matrix.asset_name }}.tar.gz
