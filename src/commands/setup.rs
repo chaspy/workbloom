@@ -2,6 +2,8 @@ use anyhow::{Context, Result};
 use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::env;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
@@ -18,7 +20,8 @@ pub fn execute(
 
     let worktree_dir_name = format!("worktree-{}", branch_name.replace('/', "-"));
     let worktree_path = repo.root_dir.join(&worktree_dir_name);
-    let tmux_session_name = tmux::sanitize_session_name(&worktree_dir_name);
+    let display_worktree_path = display_worktree_path(&repo.root_dir, &worktree_dir_name);
+    let tmux_session_name = tmux::session_name(&repo.root_dir, &worktree_dir_name);
 
     crate::outln!("{} Setting up git worktree...", "🌲".green());
     crate::outln!("Branch: {}", branch_name.cyan());
@@ -89,18 +92,24 @@ pub fn execute(
     crate::outln!(
         "{} Worktree location: {}",
         "📍".blue(),
-        worktree_path.display()
+        display_worktree_path.display()
     );
     crate::outln!();
 
     if print_path {
-        println!("{}", worktree_path.display());
+        println!("{}", display_worktree_path.display());
     } else if start_shell {
         crate::outln!("{} Starting worktree session...", "📂".blue());
         let mut started = false;
+        let inside_tmux = env::var("TMUX").map(|val| !val.is_empty()).unwrap_or(false);
 
         if use_tmux {
-            if tmux::is_available() {
+            if inside_tmux {
+                crate::outln!(
+                    "{} Already inside tmux. Launching a regular shell instead...",
+                    "ℹ️".blue()
+                );
+            } else if tmux::is_available() {
                 match start_tmux_session(&tmux_session_name, &worktree_path) {
                     Ok(_) => started = true,
                     Err(err) => {
@@ -125,7 +134,7 @@ pub fn execute(
         }
     } else {
         crate::outln!("{} Moving to worktree directory...", "📂".blue());
-        crate::outln!("cd {}", worktree_path.display());
+        crate::outln!("cd {}", display_worktree_path.display());
         crate::outln!();
         crate::outln!("💡 Tip: Default behavior prints the worktree path. Use 'workbloom setup {branch_name} --shell' to start a shell");
     }
@@ -214,4 +223,33 @@ fn start_shell_in_directory(worktree_path: &std::path::Path) -> Result<()> {
         .context("Failed to start shell in worktree directory")?;
 
     Ok(())
+}
+
+fn display_worktree_path(repo_root: &Path, worktree_dir_name: &str) -> PathBuf {
+    if let Some(pwd_root) = preferred_pwd_root(repo_root) {
+        return pwd_root.join(worktree_dir_name);
+    }
+
+    display_root_alias(repo_root).join(worktree_dir_name)
+}
+
+fn preferred_pwd_root(repo_root: &Path) -> Option<PathBuf> {
+    let pwd = env::var("PWD").ok()?;
+    let pwd_path = PathBuf::from(&pwd);
+    let canonical_pwd = fs::canonicalize(&pwd_path).ok()?;
+    if canonical_pwd == repo_root {
+        Some(pwd_path)
+    } else {
+        None
+    }
+}
+
+fn display_root_alias(repo_root: &Path) -> PathBuf {
+    if let Ok(stripped) = repo_root.strip_prefix("/private") {
+        let alias_root = Path::new("/").join(stripped);
+        if alias_root.exists() {
+            return alias_root;
+        }
+    }
+    repo_root.to_path_buf()
 }

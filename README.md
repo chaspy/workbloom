@@ -111,10 +111,11 @@ This will:
 
 #### tmux sessions
 
-- When you pass `--shell`, Workbloom starts or reattaches to a tmux session named after the worktree directory (e.g. `worktree-feature-my-branch`).
+- When you pass `--shell`, Workbloom starts or reattaches to a tmux session whose name includes the repository and worktree (e.g. `wb-workbloom-a1b2c3d4-worktree-feature-my-branch`), so different repositories never collide.
 - Use `--no-tmux` alongside `--shell` if you prefer a plain shell instead of tmux.
 - If tmux is not installed, Workbloom falls back to a normal shell automatically.
-- `cleanup` also terminates matching tmux sessions when it removes their worktree directories.
+- If you already run Workbloom from inside an existing tmux session, it automatically skips nested tmux launch and opens a plain shell.
+- `cleanup` also terminates the matching tmux sessions (scoped per repository) when it removes their worktree directories.
 
 ### Clean up worktrees
 
