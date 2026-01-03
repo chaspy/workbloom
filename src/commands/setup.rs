@@ -9,6 +9,8 @@ use std::time::Duration;
 
 use crate::{config::Config, file_ops, git::GitRepo, tmux};
 
+const PROGRESS_STEPS: u64 = 4;
+
 pub fn execute(
     branch_name: &str,
     start_shell: bool,
@@ -30,42 +32,10 @@ pub fn execute(
 
     run_cleanup_if_exists(&repo, Some(branch_name))?;
 
-    let pb = if print_path {
-        ProgressBar::hidden()
-    } else {
-        let pb = ProgressBar::new(4);
-        pb.set_style(
-            ProgressStyle::default_bar()
-                .template(
-                    "{spinner:.green} [{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg}",
-                )
-                .unwrap()
-                .progress_chars("##-"),
-        );
-        pb.enable_steady_tick(Duration::from_millis(100));
-        pb
-    };
+    let pb = build_progress_bar(print_path);
 
     pb.set_message("Checking branch...");
-    if !repo.branch_exists(branch_name)? {
-        // Check if branch exists on remote
-        if repo.remote_branch_exists(branch_name)? {
-            crate::outln!(
-                "{} Branch '{}' exists on remote. Fetching and creating tracking branch...",
-                "🌐".blue(),
-                branch_name
-            );
-            repo.fetch_remote_branch(branch_name)?;
-            repo.create_tracking_branch(branch_name)?;
-        } else {
-            crate::outln!(
-                "{} Branch '{}' does not exist. Creating it...",
-                "📝".yellow(),
-                branch_name
-            );
-            repo.create_branch(branch_name)?;
-        }
-    }
+    ensure_branch_ready(&repo, branch_name)?;
     pb.inc(1);
 
     pb.set_message("Creating worktree...");
@@ -96,48 +66,14 @@ pub fn execute(
     );
     crate::outln!();
 
-    if print_path {
-        println!("{}", display_worktree_path.display());
-    } else if start_shell {
-        crate::outln!("{} Starting worktree session...", "📂".blue());
-        let mut started = false;
-        let inside_tmux = env::var("TMUX").map(|val| !val.is_empty()).unwrap_or(false);
-
-        if use_tmux {
-            if inside_tmux {
-                crate::outln!(
-                    "{} Already inside tmux. Launching a regular shell instead...",
-                    "ℹ️".blue()
-                );
-            } else if tmux::is_available() {
-                match start_tmux_session(&tmux_session_name, &worktree_path) {
-                    Ok(_) => started = true,
-                    Err(err) => {
-                        crate::outln!(
-                            "{} tmux session failed (falling back to shell): {}",
-                            "⚠️".yellow(),
-                            err
-                        );
-                    }
-                }
-            } else {
-                crate::outln!(
-                    "{} tmux is not available. Starting a normal shell instead...",
-                    "⚠️".yellow()
-                );
-            }
-        }
-
-        if !started {
-            crate::outln!("{} Launching shell in worktree directory...", "📂".blue());
-            start_shell_in_directory(&worktree_path)?;
-        }
-    } else {
-        crate::outln!("{} Moving to worktree directory...", "📂".blue());
-        crate::outln!("cd {}", display_worktree_path.display());
-        crate::outln!();
-        crate::outln!("💡 Tip: Default behavior prints the worktree path. Use 'workbloom setup {branch_name} --shell' to start a shell");
-    }
+    handle_post_setup(
+        print_path,
+        start_shell,
+        use_tmux,
+        &display_worktree_path,
+        &worktree_path,
+        &tmux_session_name,
+    )?;
 
     Ok(())
 }
@@ -190,6 +126,109 @@ fn run_cleanup_if_exists(repo: &GitRepo, exclude_branch: Option<&str>) -> Result
     crate::commands::cleanup::cleanup_merged_worktrees_with_exclude(repo, exclude_branch)?;
 
     crate::outln!();
+    Ok(())
+}
+
+fn build_progress_bar(print_path: bool) -> ProgressBar {
+    if print_path {
+        ProgressBar::hidden()
+    } else {
+        let pb = ProgressBar::new(PROGRESS_STEPS);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template(
+                    "{spinner:.green} [{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg}",
+                )
+                .unwrap()
+                .progress_chars("##-"),
+        );
+        pb.enable_steady_tick(Duration::from_millis(100));
+        pb
+    }
+}
+
+fn ensure_branch_ready(repo: &GitRepo, branch_name: &str) -> Result<()> {
+    if repo.branch_exists(branch_name)? {
+        return Ok(());
+    }
+
+    if repo.remote_branch_exists(branch_name)? {
+        crate::outln!(
+            "{} Branch '{}' exists on remote. Fetching and creating tracking branch...",
+            "🌐".blue(),
+            branch_name
+        );
+        repo.fetch_remote_branch(branch_name)?;
+        repo.create_tracking_branch(branch_name)?;
+    } else {
+        crate::outln!(
+            "{} Branch '{}' does not exist. Creating it...",
+            "📝".yellow(),
+            branch_name
+        );
+        repo.create_branch(branch_name)?;
+    }
+
+    Ok(())
+}
+
+fn handle_post_setup(
+    print_path: bool,
+    start_shell: bool,
+    use_tmux: bool,
+    display_worktree_path: &Path,
+    worktree_path: &Path,
+    tmux_session_name: &str,
+) -> Result<()> {
+    if print_path {
+        println!("{}", display_worktree_path.display());
+        return Ok(());
+    }
+
+    if start_shell {
+        crate::outln!("{} Starting worktree session...", "📂".blue());
+        let mut started = false;
+        let inside_tmux = env::var("TMUX").map(|val| !val.is_empty()).unwrap_or(false);
+
+        if use_tmux {
+            if inside_tmux {
+                crate::outln!(
+                    "{} Already inside tmux. Launching a regular shell instead...",
+                    "ℹ️".blue()
+                );
+            } else if tmux::is_available() {
+                match start_tmux_session(tmux_session_name, worktree_path) {
+                    Ok(_) => started = true,
+                    Err(err) => {
+                        crate::outln!(
+                            "{} tmux session failed (falling back to shell): {}",
+                            "⚠️".yellow(),
+                            err
+                        );
+                    }
+                }
+            } else {
+                crate::outln!(
+                    "{} tmux is not available. Starting a normal shell instead...",
+                    "⚠️".yellow()
+                );
+            }
+        }
+
+        if !started {
+            crate::outln!("{} Launching shell in worktree directory...", "📂".blue());
+            start_shell_in_directory(worktree_path)?;
+        }
+
+        return Ok(());
+    }
+
+    crate::outln!("{} Moving to worktree directory...", "📂".blue());
+    crate::outln!("cd {}", display_worktree_path.display());
+    crate::outln!();
+    crate::outln!(
+        "💡 Tip: Default behavior prints the worktree path. Use 'workbloom setup <branch> --shell' to start a shell",
+    );
     Ok(())
 }
 
