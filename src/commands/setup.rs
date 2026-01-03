@@ -314,7 +314,9 @@ mod tests {
     use anyhow::bail;
     use crate::tmux::{self, TmuxClient};
     use std::collections::HashSet;
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+
+    static TMUX_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
     #[derive(Clone)]
     struct MockTmuxClient {
@@ -391,11 +393,28 @@ mod tests {
     }
 
     fn with_mock_tmux<F: FnOnce()>(mock: Arc<MockTmuxClient>, test: F) {
+        struct ResetGuard<'a> {
+            _lock: MutexGuard<'a, ()>,
+            original: Arc<dyn TmuxClient>,
+        }
+
+        impl<'a> Drop for ResetGuard<'a> {
+            fn drop(&mut self) {
+                tmux::set_client(self.original.clone());
+            }
+        }
+
+        let lock = TMUX_TEST_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
         let original = tmux::client();
+        let guard = ResetGuard {
+            _lock: lock,
+            original,
+        };
         let trait_obj: Arc<dyn TmuxClient> = mock.clone();
         tmux::set_client(trait_obj);
+
         test();
-        tmux::set_client(original);
+        drop(guard);
     }
 
     #[test]

@@ -115,7 +115,7 @@ This will:
 - Use `--no-tmux` alongside `--shell` if you prefer a plain shell instead of tmux.
 - If tmux is not installed, Workbloom falls back to a normal shell automatically.
 - If you already run Workbloom from inside an existing tmux session, it automatically skips nested tmux launch and opens a plain shell.
-- `cleanup` also terminates the matching tmux sessions (scoped per repository) when it removes their worktree directories.
+- `cleanup` also terminates the matching tmux sessions (scoped per repository) when it removes their worktree directories, including sessions created by older Workbloom versions that used the legacy naming scheme.
 
 ### Clean up worktrees
 
