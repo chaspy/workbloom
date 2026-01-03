@@ -314,9 +314,7 @@ mod tests {
     use anyhow::bail;
     use crate::tmux::{self, TmuxClient};
     use std::collections::HashSet;
-    use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
-
-    static TMUX_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    use std::sync::{Arc, Mutex, MutexGuard};
 
     #[derive(Clone)]
     struct MockTmuxClient {
@@ -404,7 +402,7 @@ mod tests {
             }
         }
 
-        let lock = TMUX_TEST_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let lock = tmux::test_client_lock().lock().unwrap();
         let original = tmux::client();
         let guard = ResetGuard {
             _lock: lock,

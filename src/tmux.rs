@@ -146,6 +146,12 @@ pub fn kill_session(session_name: &str) -> Result<bool> {
     client().kill_session(session_name)
 }
 
+#[cfg(test)]
+pub(crate) fn test_client_lock() -> &'static Mutex<()> {
+    static TMUX_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    TMUX_TEST_LOCK.get_or_init(|| Mutex::new(()))
+}
+
 pub fn sanitize_session_name(name: &str) -> String {
     let mut sanitized = String::with_capacity(name.len());
     for ch in name.chars() {
