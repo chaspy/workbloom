@@ -40,7 +40,7 @@ impl TmuxClient for RealTmuxClient {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
-            .with_context(|| format!("Failed to check tmux session '{}'", session_name))?;
+            .with_context(|| format!("Failed to check tmux session '{session_name}'"))?;
 
         match status.code() {
             Some(0) => Ok(true),
@@ -56,7 +56,7 @@ impl TmuxClient for RealTmuxClient {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
-            .with_context(|| format!("Failed to create tmux session '{}'", session_name))?;
+            .with_context(|| format!("Failed to create tmux session '{session_name}'"))?;
 
         if status.success() {
             Ok(())
@@ -71,7 +71,7 @@ impl TmuxClient for RealTmuxClient {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
-            .with_context(|| format!("Failed to attach to tmux session '{}'", session_name))?;
+            .with_context(|| format!("Failed to attach to tmux session '{session_name}'"))?;
 
         if status.success() {
             Ok(())
@@ -94,7 +94,7 @@ impl TmuxClient for RealTmuxClient {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
-            .with_context(|| format!("Failed to kill tmux session '{}'", session_name))?;
+            .with_context(|| format!("Failed to kill tmux session '{session_name}'"))?;
 
         if status.success() {
             Ok(true)
