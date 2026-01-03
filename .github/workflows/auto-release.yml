@@ -159,7 +159,7 @@ jobs:
       
       - name: Install Rust
         # Need Rust for cargo publish regardless of tag existence
-        if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
+        if: steps.tag_exists.outputs.EXISTS == 'false' || github.event_name == 'workflow_dispatch'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Check code quality
@@ -173,7 +173,7 @@ jobs:
 
       - name: Verify registry token
         # Need to verify token for cargo publish
-        if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
+        if: steps.tag_exists.outputs.EXISTS == 'false' || github.event_name == 'workflow_dispatch'
         run: |
           if [ -z "${{ secrets.CARGO_REGISTRY_TOKEN }}" ]; then
             echo "❌ CARGO_REGISTRY_TOKEN secret is not set"
@@ -183,7 +183,7 @@ jobs:
 
       - name: Publish to crates.io
         # Always try to publish - cargo will handle if already published
-        if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
+        if: steps.tag_exists.outputs.EXISTS == 'false' || github.event_name == 'workflow_dispatch'
         run: |
           echo "Publishing to crates.io..."
           PUBLISH_OUTPUT=$(cargo publish --allow-dirty --token ${{ secrets.CARGO_REGISTRY_TOKEN }} 2>&1 || true)
