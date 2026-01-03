@@ -187,33 +187,9 @@ fn handle_post_setup(
 
     if start_shell {
         crate::outln!("{} Starting worktree session...", "📂".blue());
-        let mut started = false;
         let inside_tmux = env::var("TMUX").map(|val| !val.is_empty()).unwrap_or(false);
-
-        if use_tmux {
-            if inside_tmux {
-                crate::outln!(
-                    "{} Already inside tmux. Launching a regular shell instead...",
-                    "ℹ️".blue()
-                );
-            } else if tmux::is_available() {
-                match start_tmux_session(tmux_session_name, worktree_path) {
-                    Ok(_) => started = true,
-                    Err(err) => {
-                        crate::outln!(
-                            "{} tmux session failed (falling back to shell): {}",
-                            "⚠️".yellow(),
-                            err
-                        );
-                    }
-                }
-            } else {
-                crate::outln!(
-                    "{} tmux is not available. Starting a normal shell instead...",
-                    "⚠️".yellow()
-                );
-            }
-        }
+        let started =
+            manage_tmux_session(use_tmux, inside_tmux, worktree_path, tmux_session_name)?;
 
         if !started {
             crate::outln!("{} Launching shell in worktree directory...", "📂".blue());
@@ -230,6 +206,45 @@ fn handle_post_setup(
         "💡 Tip: Default behavior prints the worktree path. Use 'workbloom setup <branch> --shell' to start a shell",
     );
     Ok(())
+}
+
+fn manage_tmux_session(
+    use_tmux: bool,
+    inside_tmux: bool,
+    worktree_path: &Path,
+    tmux_session_name: &str,
+) -> Result<bool> {
+    if !use_tmux {
+        return Ok(false);
+    }
+
+    if inside_tmux {
+        crate::outln!(
+            "{} Already inside tmux. Launching a regular shell instead...",
+            "ℹ️".blue()
+        );
+        return Ok(false);
+    }
+
+    if !tmux::is_available() {
+        crate::outln!(
+            "{} tmux is not available. Starting a normal shell instead...",
+            "⚠️".yellow()
+        );
+        return Ok(false);
+    }
+
+    match start_tmux_session(tmux_session_name, worktree_path) {
+        Ok(_) => Ok(true),
+        Err(err) => {
+            crate::outln!(
+                "{} tmux session failed (falling back to shell): {}",
+                "⚠️".yellow(),
+                err
+            );
+            Ok(false)
+        }
+    }
 }
 
 fn start_tmux_session(session_name: &str, worktree_path: &std::path::Path) -> Result<()> {
@@ -291,4 +306,146 @@ fn display_root_alias(repo_root: &Path) -> PathBuf {
         }
     }
     repo_root.to_path_buf()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::bail;
+    use crate::tmux::{self, TmuxClient};
+    use std::collections::HashSet;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone)]
+    struct MockTmuxClient {
+        available: bool,
+        state: Arc<Mutex<MockTmuxState>>,
+    }
+
+    #[derive(Default)]
+    struct MockTmuxState {
+        sessions: HashSet<String>,
+        created: Vec<String>,
+        attached: Vec<String>,
+    }
+
+    impl MockTmuxClient {
+        fn new(available: bool) -> Self {
+            Self {
+                available,
+                state: Arc::new(Mutex::new(MockTmuxState::default())),
+            }
+        }
+
+        fn with_session(self, name: &str) -> Self {
+            {
+                let mut state = self.state.lock().unwrap();
+                state.sessions.insert(name.to_string());
+            }
+            self
+        }
+
+        fn created_sessions(&self) -> Vec<String> {
+            self.state.lock().unwrap().created.clone()
+        }
+
+        fn attached_sessions(&self) -> Vec<String> {
+            self.state.lock().unwrap().attached.clone()
+        }
+    }
+
+    impl TmuxClient for MockTmuxClient {
+        fn is_available(&self) -> bool {
+            self.available
+        }
+
+        fn session_exists(&self, session_name: &str) -> Result<bool> {
+            Ok(self
+                .state
+                .lock()
+                .unwrap()
+                .sessions
+                .contains(session_name))
+        }
+
+        fn create_session(&self, session_name: &str, _directory: &Path) -> Result<()> {
+            let mut state = self.state.lock().unwrap();
+            state.sessions.insert(session_name.to_string());
+            state.created.push(session_name.to_string());
+            Ok(())
+        }
+
+        fn attach_session(&self, session_name: &str) -> Result<()> {
+            let mut state = self.state.lock().unwrap();
+            if !state.sessions.contains(session_name) {
+                bail!("session not found");
+            }
+            state.attached.push(session_name.to_string());
+            Ok(())
+        }
+
+        fn kill_session(&self, session_name: &str) -> Result<bool> {
+            let mut state = self.state.lock().unwrap();
+            Ok(state.sessions.remove(session_name))
+        }
+    }
+
+    fn with_mock_tmux<F: FnOnce()>(mock: Arc<MockTmuxClient>, test: F) {
+        let original = tmux::client();
+        let trait_obj: Arc<dyn TmuxClient> = mock.clone();
+        tmux::set_client(trait_obj);
+        test();
+        tmux::set_client(original);
+    }
+
+    #[test]
+    fn manage_tmux_session_reattaches_existing_session() {
+        let mock = Arc::new(MockTmuxClient::new(true).with_session("session-a"));
+        with_mock_tmux(mock.clone(), || {
+            let started = manage_tmux_session(
+                true,
+                false,
+                Path::new("/tmp/worktree"),
+                "session-a",
+            )
+            .unwrap();
+            assert!(started);
+        });
+        assert_eq!(mock.created_sessions(), Vec::<String>::new());
+        assert_eq!(mock.attached_sessions(), vec!["session-a".to_string()]);
+    }
+
+    #[test]
+    fn manage_tmux_session_creates_new_session_when_missing() {
+        let mock = Arc::new(MockTmuxClient::new(true));
+        with_mock_tmux(mock.clone(), || {
+            let started = manage_tmux_session(
+                true,
+                false,
+                Path::new("/tmp/worktree"),
+                "session-b",
+            )
+            .unwrap();
+            assert!(started);
+        });
+        assert_eq!(mock.created_sessions(), vec!["session-b".to_string()]);
+        assert_eq!(mock.attached_sessions(), vec!["session-b".to_string()]);
+    }
+
+    #[test]
+    fn manage_tmux_session_skips_when_unavailable() {
+        let mock = Arc::new(MockTmuxClient::new(false));
+        with_mock_tmux(mock.clone(), || {
+            let started = manage_tmux_session(
+                true,
+                false,
+                Path::new("/tmp/worktree"),
+                "session-c",
+            )
+            .unwrap();
+            assert!(!started);
+        });
+        assert!(mock.created_sessions().is_empty());
+        assert!(mock.attached_sessions().is_empty());
+    }
 }

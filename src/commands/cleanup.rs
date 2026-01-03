@@ -398,16 +398,49 @@ fn get_branch_head(repo: &GitRepo, branch_name: &str) -> Result<String> {
 fn stop_tmux_session(repo_root: &std::path::Path, worktree_path: &std::path::Path) {
     if let Some(dir_name) = worktree_path.file_name().and_then(|n| n.to_str()) {
         let session_name = tmux::session_name(repo_root, dir_name);
+        if try_stop_session(&session_name, false) {
+            return;
+        }
 
-        match tmux::kill_session(&session_name) {
-            Ok(true) => crate::outln!("    {} Closed tmux session: {}", "🌀".blue(), session_name),
-            Ok(false) => crate::outln!("    {} No tmux session to close", "ℹ️".blue()),
-            Err(e) => crate::outln!(
+        let legacy_name = tmux::legacy_session_name(repo_root, dir_name);
+        if legacy_name != session_name {
+            try_stop_session(&legacy_name, true);
+        }
+    }
+}
+
+fn try_stop_session(session_name: &str, legacy: bool) -> bool {
+    match tmux::kill_session(session_name) {
+        Ok(true) => {
+            if legacy {
+                crate::outln!(
+                    "    {} Closed legacy tmux session: {}",
+                    "🌀".blue(),
+                    session_name
+                );
+            } else {
+                crate::outln!("    {} Closed tmux session: {}", "🌀".blue(), session_name);
+            }
+            true
+        }
+        Ok(false) => {
+            let label = if legacy { "legacy tmux session" } else { "tmux session" };
+            crate::outln!(
+                "    {} No {} to close (session: {})",
+                "ℹ️".blue(),
+                label,
+                session_name
+            );
+            false
+        }
+        Err(e) => {
+            crate::outln!(
                 "    {} Failed to close tmux session '{}': {}",
                 "⚠️".yellow(),
                 session_name,
                 e
-            ),
+            );
+            false
         }
     }
 }

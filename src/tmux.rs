@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use sha1::{Digest, Sha1};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
@@ -95,7 +96,15 @@ impl TmuxClient for RealTmuxClient {
             .status()
             .with_context(|| format!("Failed to kill tmux session '{}'", session_name))?;
 
-        Ok(status.success())
+        if status.success() {
+            Ok(true)
+        } else {
+            bail!(
+                "tmux exited with status {:?} while killing session '{}'",
+                status.code(),
+                session_name
+            )
+        }
     }
 }
 
@@ -156,6 +165,14 @@ pub fn sanitize_session_name(name: &str) -> String {
 }
 
 pub fn session_name(repo_root: &Path, identifier: &str) -> String {
+    session_name_with_hash(repo_root, identifier, &stable_hash(repo_root))
+}
+
+pub fn legacy_session_name(repo_root: &Path, identifier: &str) -> String {
+    session_name_with_hash(repo_root, identifier, &legacy_hash(repo_root))
+}
+
+fn session_name_with_hash(repo_root: &Path, identifier: &str, hash: &str) -> String {
     let repo_segment = repo_root
         .file_name()
         .and_then(|n| n.to_str())
@@ -163,11 +180,18 @@ pub fn session_name(repo_root: &Path, identifier: &str) -> String {
         .unwrap_or("repo");
     let repo_slug = sanitize_session_name(repo_segment);
     let identifier_slug = sanitize_session_name(identifier);
-    let hash = short_hash(repo_root);
     sanitize_session_name(&format!("wb-{repo_slug}-{hash}-{identifier_slug}"))
 }
 
-fn short_hash(repo_root: &Path) -> String {
+fn stable_hash(repo_root: &Path) -> String {
+    let mut hasher = Sha1::new();
+    hasher.update(repo_root.to_string_lossy().as_bytes());
+    let digest = hasher.finalize();
+    let bytes = [digest[0], digest[1], digest[2], digest[3]];
+    format!("{:08x}", u32::from_be_bytes(bytes))
+}
+
+fn legacy_hash(repo_root: &Path) -> String {
     let mut hasher = DefaultHasher::new();
     repo_root.to_string_lossy().hash(&mut hasher);
     format!("{:08x}", hasher.finish())
@@ -175,7 +199,7 @@ fn short_hash(repo_root: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{sanitize_session_name, session_name};
+    use super::{legacy_session_name, sanitize_session_name, session_name};
     use std::path::PathBuf;
 
     #[test]
@@ -201,5 +225,13 @@ mod tests {
         let name_b = session_name(&repo_b, "worktree-feature");
         assert_ne!(name_a, name_b);
         assert!(name_a.starts_with("wb-"));
+    }
+
+    #[test]
+    fn legacy_and_current_session_names_differ() {
+        let repo = PathBuf::from("/tmp/repo-a");
+        let current = session_name(&repo, "worktree-feature");
+        let legacy = legacy_session_name(&repo, "worktree-feature");
+        assert_ne!(current, legacy);
     }
 }
