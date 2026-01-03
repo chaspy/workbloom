@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-01-03
+
+### Added
+- tmux ヘルパーモジュールを追加し、`workbloom setup --shell` でワークツリーごとの tmux セッションを自動生成・再接続できるようにしました
+- `--no-tmux` フラグで tmux 管理を無効化し、通常シェルへフォールバックするオプションを提供
+
+### Changed
+- tmux セッション名がリポジトリとワークツリーに紐づく一意な形式 (`wb-<repo>-<hash>-<worktree>`) になり、リポジトリ間で衝突しないようにしました
+- `cleanup` コマンドがワークツリー削除時に対応する tmux セッションも自動的に終了
+- `setup` の CLI ロジックをリファクタリングして進捗バー生成・ブランチ準備・post-setup 処理を分離し、可読性とテスト容易性を向上
+- macOS の `/private` パス問題を考慮し、`workbloom setup` のパス出力がコマンド実行時の見たままに近い形で表示されるよう調整
+
 ## [0.7.0] - 2025-12-26
 
 ### Added

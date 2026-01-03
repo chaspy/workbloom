@@ -12,6 +12,7 @@ A Git worktree management tool written in Rust that automates worktree setup and
 - 🌲 **Easy worktree setup** - Create git worktrees with a single command
 - 📦 **Automatic file copying** - Copies essential files (.env, .envrc, etc.) to new worktrees
 - 🧹 **Smart cleanup** - Remove merged worktrees automatically or interactively
+- 🌀 **tmux integration** - Keep one tmux session per worktree and reattach automatically
 - 🎨 **Beautiful output** - Colored terminal output with progress indicators
 - 💬 **Claude Comment Management** - Automatically minimize old Claude PR review comments
 
@@ -106,7 +107,15 @@ This will:
 1. Create a new worktree for the branch (creating the branch if it doesn't exist)
 2. Copy required files from the main repository (.env, .envrc, etc.)
 3. Setup direnv if available
-4. Start a new shell in the worktree directory (when --shell is used)
+4. Start a new tmux session (or reattach) for the worktree when `--shell` is used
+
+#### tmux sessions
+
+- When you pass `--shell`, Workbloom starts or reattaches to a tmux session whose name includes the repository and worktree (e.g. `wb-workbloom-a1b2c3d4-worktree-feature-my-branch`), so different repositories never collide.
+- Use `--no-tmux` alongside `--shell` if you prefer a plain shell instead of tmux.
+- If tmux is not installed, Workbloom falls back to a normal shell automatically.
+- If you already run Workbloom from inside an existing tmux session, it automatically skips nested tmux launch and opens a plain shell.
+- `cleanup` also terminates the matching tmux sessions (scoped per repository) when it removes their worktree directories, including sessions created by older Workbloom versions that used the legacy naming scheme.
 
 ### Clean up worktrees
 

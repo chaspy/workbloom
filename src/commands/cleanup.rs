@@ -3,7 +3,7 @@ use colored::*;
 use std::io::{self, Write};
 use std::time::SystemTime;
 
-use crate::git::GitRepo;
+use crate::{git::GitRepo, tmux};
 
 pub fn execute(mode: CleanupMode) -> Result<()> {
     let repo = GitRepo::new()?;
@@ -194,6 +194,7 @@ fn remove_worktree_and_report(
     match repo.remove_worktree(&worktree.path, true) {
         Ok(_) => {
             crate::outln!("    {} Successfully removed", "✅".green());
+            stop_tmux_session(&repo.root_dir, &worktree.path);
             WorktreeAction::Removed
         }
         Err(e) => {
@@ -317,6 +318,7 @@ fn remove_worktree_with_branch(repo: &GitRepo, path: &std::path::Path, branch: &
     }
 
     crate::outln!("  {} Worktree removed successfully", "✅".green());
+    stop_tmux_session(&repo.root_dir, path);
 
     if repo.branch_exists(branch)? {
         if let Err(e) = repo.delete_branch(branch) {
@@ -391,4 +393,177 @@ fn get_branch_head(repo: &GitRepo, branch_name: &str) -> Result<String> {
         .context("Failed to get branch HEAD")?;
 
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn stop_tmux_session(repo_root: &std::path::Path, worktree_path: &std::path::Path) {
+    if let Some(dir_name) = worktree_path.file_name().and_then(|n| n.to_str()) {
+        let session_name = tmux::session_name(repo_root, dir_name);
+        let legacy_name = tmux::legacy_session_name(repo_root, dir_name);
+        try_stop_session(&session_name, false);
+        if legacy_name != session_name {
+            try_stop_session(&legacy_name, true);
+        }
+    }
+}
+
+fn try_stop_session(session_name: &str, legacy: bool) -> bool {
+    match tmux::kill_session(session_name) {
+        Ok(true) => {
+            if legacy {
+                crate::outln!(
+                    "    {} Closed legacy tmux session: {}",
+                    "🌀".blue(),
+                    session_name
+                );
+            } else {
+                crate::outln!("    {} Closed tmux session: {}", "🌀".blue(), session_name);
+            }
+            true
+        }
+        Ok(false) => {
+            let label = if legacy { "legacy tmux session" } else { "tmux session" };
+            crate::outln!(
+                "    {} No {} to close (session: {})",
+                "ℹ️".blue(),
+                label,
+                session_name
+            );
+            false
+        }
+        Err(e) => {
+            crate::outln!(
+                "    {} Failed to close tmux session '{}': {}",
+                "⚠️".yellow(),
+                session_name,
+                e
+            );
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::bail;
+    use crate::tmux::{self, TmuxClient};
+    use std::collections::HashSet;
+    use std::path::PathBuf;
+    use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+
+    static TMUX_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    #[derive(Clone)]
+    struct MockCleanupTmux {
+        available: bool,
+        state: Arc<Mutex<MockCleanupState>>,
+    }
+
+    #[derive(Default)]
+    struct MockCleanupState {
+        sessions: HashSet<String>,
+        killed: Vec<String>,
+    }
+
+    impl MockCleanupTmux {
+        fn new(available: bool) -> Self {
+            Self {
+                available,
+                state: Arc::new(Mutex::new(MockCleanupState::default())),
+            }
+        }
+
+        fn with_session(self, name: &str) -> Self {
+            {
+                let mut state = self.state.lock().unwrap();
+                state.sessions.insert(name.to_string());
+            }
+            self
+        }
+
+        fn killed_sessions(&self) -> Vec<String> {
+            self.state.lock().unwrap().killed.clone()
+        }
+    }
+
+    impl TmuxClient for MockCleanupTmux {
+        fn is_available(&self) -> bool {
+            self.available
+        }
+
+        fn session_exists(&self, session_name: &str) -> Result<bool> {
+            Ok(self
+                .state
+                .lock()
+                .unwrap()
+                .sessions
+                .contains(session_name))
+        }
+
+        fn create_session(&self, _session_name: &str, _directory: &std::path::Path) -> Result<()> {
+            bail!("not implemented in cleanup mock");
+        }
+
+        fn attach_session(&self, _session_name: &str) -> Result<()> {
+            bail!("not implemented in cleanup mock");
+        }
+
+        fn kill_session(&self, session_name: &str) -> Result<bool> {
+            if !self.available {
+                return Ok(false);
+            }
+
+            let mut state = self.state.lock().unwrap();
+            if state.sessions.remove(session_name) {
+                state.killed.push(session_name.to_string());
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        }
+    }
+
+    fn with_mock_tmux<F: FnOnce()>(mock: Arc<MockCleanupTmux>, test: F) {
+        struct ResetGuard<'a> {
+            _lock: MutexGuard<'a, ()>,
+            original: Arc<dyn TmuxClient>,
+        }
+
+        impl<'a> Drop for ResetGuard<'a> {
+            fn drop(&mut self) {
+                tmux::set_client(self.original.clone());
+            }
+        }
+
+        let lock = TMUX_TEST_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let original = tmux::client();
+        let guard = ResetGuard {
+            _lock: lock,
+            original,
+        };
+        let trait_obj: Arc<dyn TmuxClient> = mock.clone();
+        tmux::set_client(trait_obj);
+        test();
+        drop(guard);
+    }
+
+    #[test]
+    fn stop_tmux_session_closes_primary_and_legacy_sessions() {
+        let repo_root = PathBuf::from("/tmp/repo-stop");
+        let worktree_path = repo_root.join("worktree-feature");
+        let primary = tmux::session_name(&repo_root, "worktree-feature");
+        let legacy = tmux::legacy_session_name(&repo_root, "worktree-feature");
+
+        let mock = Arc::new(
+            MockCleanupTmux::new(true)
+                .with_session(&primary)
+                .with_session(&legacy),
+        );
+
+        with_mock_tmux(mock.clone(), || {
+            stop_tmux_session(&repo_root, &worktree_path);
+        });
+
+        assert_eq!(mock.killed_sessions(), vec![primary, legacy]);
+    }
 }
