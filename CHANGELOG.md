@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.8.0] - 2026-01-03
 
+## [0.8.1] - 2026-01-04
+
+### Fixed
+- CI の tmux モックを共有ロックで直列化し、`commands::cleanup` のテストが並列実行時にセッション kill を見失わないよう修正
+- `cargo clippy` の `uninlined_format_args` 警告を解消し、Build ワークフロー失敗の要因を排除
+
+### Changed
+- `Auto Release` ワークフローを Build 成功後 (`workflow_run`) のみ動作させ、main が red のままタグ／リリース／ publish が走らないよう調整
+- リリース対象がない場合は Rust toolchain のインストールや crates.io publish をスキップし、Actions 実行時間を短縮
+
 ### Added
 - tmux ヘルパーモジュールを追加し、`workbloom setup --shell` でワークツリーごとの tmux セッションを自動生成・再接続できるようにしました
 - `--no-tmux` フラグで tmux 管理を無効化し、通常シェルへフォールバックするオプションを提供
@@ -136,6 +146,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial features
 
+[0.8.1]: https://github.com/chaspy/workbloom/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/chaspy/workbloom/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/chaspy/workbloom/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/chaspy/workbloom/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/chaspy/workbloom/compare/v0.3.1...v0.6.0
 [0.3.1]: https://github.com/chaspy/workbloom/compare/v0.3.0...v0.3.1
