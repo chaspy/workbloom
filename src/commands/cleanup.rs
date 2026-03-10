@@ -3,7 +3,7 @@ use colored::*;
 use std::io::{self, Write};
 use std::time::SystemTime;
 
-use crate::{git::GitRepo, tmux};
+use crate::{git::GitRepo, multiplexer};
 
 pub fn execute(mode: CleanupMode) -> Result<()> {
     let repo = GitRepo::new()?;
@@ -194,7 +194,7 @@ fn remove_worktree_and_report(
     match repo.remove_worktree(&worktree.path, true) {
         Ok(_) => {
             crate::outln!("    {} Successfully removed", "✅".green());
-            stop_tmux_session(&repo.root_dir, &worktree.path);
+            stop_multiplexer_sessions(&repo.root_dir, &worktree.path);
             WorktreeAction::Removed
         }
         Err(e) => {
@@ -318,7 +318,7 @@ fn remove_worktree_with_branch(repo: &GitRepo, path: &std::path::Path, branch: &
     }
 
     crate::outln!("  {} Worktree removed successfully", "✅".green());
-    stop_tmux_session(&repo.root_dir, path);
+    stop_multiplexer_sessions(&repo.root_dir, path);
 
     if repo.branch_exists(branch)? {
         if let Err(e) = repo.delete_branch(branch) {
@@ -395,33 +395,46 @@ fn get_branch_head(repo: &GitRepo, branch_name: &str) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-fn stop_tmux_session(repo_root: &std::path::Path, worktree_path: &std::path::Path) {
+fn stop_multiplexer_sessions(repo_root: &std::path::Path, worktree_path: &std::path::Path) {
     if let Some(dir_name) = worktree_path.file_name().and_then(|n| n.to_str()) {
-        let session_name = tmux::session_name(repo_root, dir_name);
-        let legacy_name = tmux::legacy_session_name(repo_root, dir_name);
-        try_stop_session(&session_name, false);
-        if legacy_name != session_name {
-            try_stop_session(&legacy_name, true);
+        let session_name = multiplexer::session_name(repo_root, dir_name);
+        for backend in multiplexer::available_backends() {
+            try_stop_session(backend, &session_name, false);
+        }
+
+        let legacy_name = multiplexer::legacy_session_name(repo_root, dir_name);
+        if legacy_name != session_name && multiplexer::is_available(multiplexer::Backend::Tmux) {
+            try_stop_session(multiplexer::Backend::Tmux, &legacy_name, true);
         }
     }
 }
 
-fn try_stop_session(session_name: &str, legacy: bool) -> bool {
-    match tmux::kill_session(session_name) {
+fn try_stop_session(backend: multiplexer::Backend, session_name: &str, legacy: bool) -> bool {
+    match multiplexer::kill_session(backend, session_name) {
         Ok(true) => {
             if legacy {
                 crate::outln!(
-                    "    {} Closed legacy tmux session: {}",
+                    "    {} Closed legacy {} session: {}",
                     "🌀".blue(),
+                    backend.display_name(),
                     session_name
                 );
             } else {
-                crate::outln!("    {} Closed tmux session: {}", "🌀".blue(), session_name);
+                crate::outln!(
+                    "    {} Closed {} session: {}",
+                    "🌀".blue(),
+                    backend.display_name(),
+                    session_name
+                );
             }
             true
         }
         Ok(false) => {
-            let label = if legacy { "legacy tmux session" } else { "tmux session" };
+            let label = if legacy {
+                format!("legacy {} session", backend.display_name())
+            } else {
+                format!("{} session", backend.display_name())
+            };
             crate::outln!(
                 "    {} No {} to close (session: {})",
                 "ℹ️".blue(),
@@ -445,123 +458,144 @@ fn try_stop_session(session_name: &str, legacy: bool) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::multiplexer::{self, Backend, MultiplexerClient};
     use anyhow::bail;
-    use crate::tmux::{self, TmuxClient};
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex, MutexGuard};
 
     #[derive(Clone)]
-    struct MockCleanupTmux {
-        available: bool,
+    struct MockCleanupMultiplexer {
+        available: HashSet<Backend>,
         state: Arc<Mutex<MockCleanupState>>,
     }
 
     #[derive(Default)]
     struct MockCleanupState {
-        sessions: HashSet<String>,
-        killed: Vec<String>,
+        sessions: HashMap<Backend, HashSet<String>>,
+        killed: Vec<(Backend, String)>,
     }
 
-    impl MockCleanupTmux {
-        fn new(available: bool) -> Self {
+    impl MockCleanupMultiplexer {
+        fn new(available: &[Backend]) -> Self {
             Self {
-                available,
+                available: available.iter().copied().collect(),
                 state: Arc::new(Mutex::new(MockCleanupState::default())),
             }
         }
 
-        fn with_session(self, name: &str) -> Self {
+        fn with_session(self, backend: Backend, name: &str) -> Self {
             {
                 let mut state = self.state.lock().unwrap();
-                state.sessions.insert(name.to_string());
+                state
+                    .sessions
+                    .entry(backend)
+                    .or_default()
+                    .insert(name.to_string());
             }
             self
         }
 
-        fn killed_sessions(&self) -> Vec<String> {
+        fn killed_sessions(&self) -> Vec<(Backend, String)> {
             self.state.lock().unwrap().killed.clone()
         }
     }
 
-    impl TmuxClient for MockCleanupTmux {
-        fn is_available(&self) -> bool {
-            self.available
+    impl MultiplexerClient for MockCleanupMultiplexer {
+        fn is_available(&self, backend: Backend) -> bool {
+            self.available.contains(&backend)
         }
 
-        fn session_exists(&self, session_name: &str) -> Result<bool> {
+        fn session_exists(&self, backend: Backend, session_name: &str) -> Result<bool> {
             Ok(self
                 .state
                 .lock()
                 .unwrap()
                 .sessions
-                .contains(session_name))
+                .get(&backend)
+                .map(|sessions| sessions.contains(session_name))
+                .unwrap_or(false))
         }
 
-        fn create_session(&self, _session_name: &str, _directory: &std::path::Path) -> Result<()> {
+        fn create_session(
+            &self,
+            _backend: Backend,
+            _session_name: &str,
+            _directory: &std::path::Path,
+        ) -> Result<()> {
             bail!("not implemented in cleanup mock");
         }
 
-        fn attach_session(&self, _session_name: &str) -> Result<()> {
+        fn attach_session(&self, _backend: Backend, _session_name: &str) -> Result<()> {
             bail!("not implemented in cleanup mock");
         }
 
-        fn kill_session(&self, session_name: &str) -> Result<bool> {
-            if !self.available {
+        fn kill_session(&self, backend: Backend, session_name: &str) -> Result<bool> {
+            if !self.available.contains(&backend) {
                 return Ok(false);
             }
 
             let mut state = self.state.lock().unwrap();
-            if state.sessions.remove(session_name) {
-                state.killed.push(session_name.to_string());
-                Ok(true)
-            } else {
-                Ok(false)
+            if let Some(sessions) = state.sessions.get_mut(&backend) {
+                if sessions.remove(session_name) {
+                    state.killed.push((backend, session_name.to_string()));
+                    return Ok(true);
+                }
             }
+
+            Ok(false)
         }
     }
 
-    fn with_mock_tmux<F: FnOnce()>(mock: Arc<MockCleanupTmux>, test: F) {
+    fn with_mock_multiplexer<F: FnOnce()>(mock: Arc<MockCleanupMultiplexer>, test: F) {
         struct ResetGuard<'a> {
             _lock: MutexGuard<'a, ()>,
-            original: Arc<dyn TmuxClient>,
+            original: Arc<dyn MultiplexerClient>,
         }
 
         impl<'a> Drop for ResetGuard<'a> {
             fn drop(&mut self) {
-                tmux::set_client(self.original.clone());
+                multiplexer::set_client(self.original.clone());
             }
         }
 
-        let lock = tmux::test_client_lock().lock().unwrap();
-        let original = tmux::client();
+        let lock = multiplexer::test_client_lock().lock().unwrap();
+        let original = multiplexer::client();
         let guard = ResetGuard {
             _lock: lock,
             original,
         };
-        let trait_obj: Arc<dyn TmuxClient> = mock.clone();
-        tmux::set_client(trait_obj);
+        let trait_obj: Arc<dyn MultiplexerClient> = mock.clone();
+        multiplexer::set_client(trait_obj);
         test();
         drop(guard);
     }
 
     #[test]
-    fn stop_tmux_session_closes_primary_and_legacy_sessions() {
+    fn stop_multiplexer_sessions_closes_zellij_and_tmux_sessions() {
         let repo_root = PathBuf::from("/tmp/repo-stop");
         let worktree_path = repo_root.join("worktree-feature");
-        let primary = tmux::session_name(&repo_root, "worktree-feature");
-        let legacy = tmux::legacy_session_name(&repo_root, "worktree-feature");
+        let primary = multiplexer::session_name(&repo_root, "worktree-feature");
+        let legacy = multiplexer::legacy_session_name(&repo_root, "worktree-feature");
 
         let mock = Arc::new(
-            MockCleanupTmux::new(true)
-                .with_session(&primary)
-                .with_session(&legacy),
+            MockCleanupMultiplexer::new(&[Backend::Zellij, Backend::Tmux])
+                .with_session(Backend::Zellij, &primary)
+                .with_session(Backend::Tmux, &primary)
+                .with_session(Backend::Tmux, &legacy),
         );
 
-        with_mock_tmux(mock.clone(), || {
-            stop_tmux_session(&repo_root, &worktree_path);
+        with_mock_multiplexer(mock.clone(), || {
+            stop_multiplexer_sessions(&repo_root, &worktree_path);
         });
 
-        assert_eq!(mock.killed_sessions(), vec![primary, legacy]);
+        assert_eq!(
+            mock.killed_sessions(),
+            vec![
+                (Backend::Zellij, primary.clone()),
+                (Backend::Tmux, primary),
+                (Backend::Tmux, legacy),
+            ]
+        );
     }
 }

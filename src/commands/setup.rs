@@ -7,14 +7,14 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use crate::{config::Config, file_ops, git::GitRepo, tmux};
+use crate::{config::Config, file_ops, git::GitRepo, multiplexer};
 
 const PROGRESS_STEPS: u64 = 4;
 
 pub fn execute(
     branch_name: &str,
     start_shell: bool,
-    use_tmux: bool,
+    use_multiplexer: bool,
     print_path: bool,
 ) -> Result<()> {
     let repo = GitRepo::new()?;
@@ -23,7 +23,7 @@ pub fn execute(
     let worktree_dir_name = format!("worktree-{}", branch_name.replace('/', "-"));
     let worktree_path = repo.root_dir.join(&worktree_dir_name);
     let display_worktree_path = display_worktree_path(&repo.root_dir, &worktree_dir_name);
-    let tmux_session_name = tmux::session_name(&repo.root_dir, &worktree_dir_name);
+    let session_name = multiplexer::session_name(&repo.root_dir, &worktree_dir_name);
 
     crate::outln!("{} Setting up git worktree...", "🌲".green());
     crate::outln!("Branch: {}", branch_name.cyan());
@@ -69,10 +69,10 @@ pub fn execute(
     handle_post_setup(
         print_path,
         start_shell,
-        use_tmux,
+        use_multiplexer,
         &display_worktree_path,
         &worktree_path,
-        &tmux_session_name,
+        &session_name,
     )?;
 
     Ok(())
@@ -175,10 +175,10 @@ fn ensure_branch_ready(repo: &GitRepo, branch_name: &str) -> Result<()> {
 fn handle_post_setup(
     print_path: bool,
     start_shell: bool,
-    use_tmux: bool,
+    use_multiplexer: bool,
     display_worktree_path: &Path,
     worktree_path: &Path,
-    tmux_session_name: &str,
+    session_name: &str,
 ) -> Result<()> {
     if print_path {
         println!("{}", display_worktree_path.display());
@@ -187,9 +187,13 @@ fn handle_post_setup(
 
     if start_shell {
         crate::outln!("{} Starting worktree session...", "📂".blue());
-        let inside_tmux = env::var("TMUX").map(|val| !val.is_empty()).unwrap_or(false);
-        let started =
-            manage_tmux_session(use_tmux, inside_tmux, worktree_path, tmux_session_name)?;
+        let inside_backend = multiplexer::current_backend();
+        let started = manage_multiplexer_session(
+            use_multiplexer,
+            inside_backend,
+            worktree_path,
+            session_name,
+        )?;
 
         if !started {
             crate::outln!("{} Launching shell in worktree directory...", "📂".blue());
@@ -208,38 +212,40 @@ fn handle_post_setup(
     Ok(())
 }
 
-fn manage_tmux_session(
-    use_tmux: bool,
-    inside_tmux: bool,
+fn manage_multiplexer_session(
+    use_multiplexer: bool,
+    inside_backend: Option<multiplexer::Backend>,
     worktree_path: &Path,
-    tmux_session_name: &str,
+    session_name: &str,
 ) -> Result<bool> {
-    if !use_tmux {
+    if !use_multiplexer {
         return Ok(false);
     }
 
-    if inside_tmux {
+    if let Some(backend) = inside_backend {
         crate::outln!(
-            "{} Already inside tmux. Launching a regular shell instead...",
-            "ℹ️".blue()
+            "{} Already inside {}. Launching a regular shell instead...",
+            "ℹ️".blue(),
+            backend.display_name()
         );
         return Ok(false);
     }
 
-    if !tmux::is_available() {
+    let Some(backend) = multiplexer::preferred_backend() else {
         crate::outln!(
-            "{} tmux is not available. Starting a normal shell instead...",
+            "{} No supported multiplexer is available. Starting a normal shell instead...",
             "⚠️".yellow()
         );
         return Ok(false);
-    }
+    };
 
-    match start_tmux_session(tmux_session_name, worktree_path) {
+    match start_multiplexer_session(backend, session_name, worktree_path) {
         Ok(_) => Ok(true),
         Err(err) => {
             crate::outln!(
-                "{} tmux session failed (falling back to shell): {}",
+                "{} {} session failed (falling back to shell): {}",
                 "⚠️".yellow(),
+                backend.display_name(),
                 err
             );
             Ok(false)
@@ -247,25 +253,31 @@ fn manage_tmux_session(
     }
 }
 
-fn start_tmux_session(session_name: &str, worktree_path: &std::path::Path) -> Result<()> {
-    if tmux::session_exists(session_name)? {
+fn start_multiplexer_session(
+    backend: multiplexer::Backend,
+    session_name: &str,
+    worktree_path: &std::path::Path,
+) -> Result<()> {
+    if multiplexer::session_exists(backend, session_name)? {
         crate::outln!(
-            "{} Re-attaching to existing tmux session: {}",
+            "{} Re-attaching to existing {} session: {}",
             "🌀".blue(),
+            backend.display_name(),
             session_name
         );
-        tmux::attach_session(session_name)?;
+        multiplexer::attach_session(backend, session_name)?;
         return Ok(());
     }
 
     crate::outln!(
-        "{} Creating new tmux session: {} (dir: {})",
+        "{} Creating new {} session: {} (dir: {})",
         "🌀".blue(),
+        backend.display_name(),
         session_name,
         worktree_path.display()
     );
-    tmux::create_session(session_name, worktree_path)?;
-    tmux::attach_session(session_name)
+    multiplexer::create_session(backend, session_name, worktree_path)?;
+    multiplexer::attach_session(backend, session_name)
 }
 
 fn start_shell_in_directory(worktree_path: &std::path::Path) -> Result<()> {
@@ -311,153 +323,197 @@ fn display_root_alias(repo_root: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::multiplexer::{self, Backend, MultiplexerClient};
     use anyhow::bail;
-    use crate::tmux::{self, TmuxClient};
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
     use std::sync::{Arc, Mutex, MutexGuard};
 
     #[derive(Clone)]
-    struct MockTmuxClient {
-        available: bool,
-        state: Arc<Mutex<MockTmuxState>>,
+    struct MockMultiplexerClient {
+        available: HashSet<Backend>,
+        state: Arc<Mutex<MockMultiplexerState>>,
     }
 
     #[derive(Default)]
-    struct MockTmuxState {
-        sessions: HashSet<String>,
-        created: Vec<String>,
-        attached: Vec<String>,
+    struct MockMultiplexerState {
+        sessions: HashMap<Backend, HashSet<String>>,
+        created: Vec<(Backend, String)>,
+        attached: Vec<(Backend, String)>,
     }
 
-    impl MockTmuxClient {
-        fn new(available: bool) -> Self {
+    impl MockMultiplexerClient {
+        fn new(available: &[Backend]) -> Self {
             Self {
-                available,
-                state: Arc::new(Mutex::new(MockTmuxState::default())),
+                available: available.iter().copied().collect(),
+                state: Arc::new(Mutex::new(MockMultiplexerState::default())),
             }
         }
 
-        fn with_session(self, name: &str) -> Self {
+        fn with_session(self, backend: Backend, name: &str) -> Self {
             {
                 let mut state = self.state.lock().unwrap();
-                state.sessions.insert(name.to_string());
+                state
+                    .sessions
+                    .entry(backend)
+                    .or_default()
+                    .insert(name.to_string());
             }
             self
         }
 
-        fn created_sessions(&self) -> Vec<String> {
+        fn created_sessions(&self) -> Vec<(Backend, String)> {
             self.state.lock().unwrap().created.clone()
         }
 
-        fn attached_sessions(&self) -> Vec<String> {
+        fn attached_sessions(&self) -> Vec<(Backend, String)> {
             self.state.lock().unwrap().attached.clone()
         }
     }
 
-    impl TmuxClient for MockTmuxClient {
-        fn is_available(&self) -> bool {
-            self.available
+    impl MultiplexerClient for MockMultiplexerClient {
+        fn is_available(&self, backend: Backend) -> bool {
+            self.available.contains(&backend)
         }
 
-        fn session_exists(&self, session_name: &str) -> Result<bool> {
+        fn session_exists(&self, backend: Backend, session_name: &str) -> Result<bool> {
             Ok(self
                 .state
                 .lock()
                 .unwrap()
                 .sessions
-                .contains(session_name))
+                .get(&backend)
+                .map(|sessions| sessions.contains(session_name))
+                .unwrap_or(false))
         }
 
-        fn create_session(&self, session_name: &str, _directory: &Path) -> Result<()> {
+        fn create_session(
+            &self,
+            backend: Backend,
+            session_name: &str,
+            _directory: &Path,
+        ) -> Result<()> {
             let mut state = self.state.lock().unwrap();
-            state.sessions.insert(session_name.to_string());
-            state.created.push(session_name.to_string());
+            state
+                .sessions
+                .entry(backend)
+                .or_default()
+                .insert(session_name.to_string());
+            state.created.push((backend, session_name.to_string()));
             Ok(())
         }
 
-        fn attach_session(&self, session_name: &str) -> Result<()> {
+        fn attach_session(&self, backend: Backend, session_name: &str) -> Result<()> {
             let mut state = self.state.lock().unwrap();
-            if !state.sessions.contains(session_name) {
+            let session_exists = state
+                .sessions
+                .get(&backend)
+                .map(|sessions| sessions.contains(session_name))
+                .unwrap_or(false);
+            if !session_exists {
                 bail!("session not found");
             }
-            state.attached.push(session_name.to_string());
+            state.attached.push((backend, session_name.to_string()));
             Ok(())
         }
 
-        fn kill_session(&self, session_name: &str) -> Result<bool> {
+        fn kill_session(&self, backend: Backend, session_name: &str) -> Result<bool> {
             let mut state = self.state.lock().unwrap();
-            Ok(state.sessions.remove(session_name))
+            Ok(state
+                .sessions
+                .get_mut(&backend)
+                .map(|sessions| sessions.remove(session_name))
+                .unwrap_or(false))
         }
     }
 
-    fn with_mock_tmux<F: FnOnce()>(mock: Arc<MockTmuxClient>, test: F) {
+    fn with_mock_multiplexer<F: FnOnce()>(mock: Arc<MockMultiplexerClient>, test: F) {
         struct ResetGuard<'a> {
             _lock: MutexGuard<'a, ()>,
-            original: Arc<dyn TmuxClient>,
+            original: Arc<dyn MultiplexerClient>,
         }
 
         impl<'a> Drop for ResetGuard<'a> {
             fn drop(&mut self) {
-                tmux::set_client(self.original.clone());
+                multiplexer::set_client(self.original.clone());
             }
         }
 
-        let lock = tmux::test_client_lock().lock().unwrap();
-        let original = tmux::client();
+        let lock = multiplexer::test_client_lock().lock().unwrap();
+        let original = multiplexer::client();
         let guard = ResetGuard {
             _lock: lock,
             original,
         };
-        let trait_obj: Arc<dyn TmuxClient> = mock.clone();
-        tmux::set_client(trait_obj);
+        let trait_obj: Arc<dyn MultiplexerClient> = mock.clone();
+        multiplexer::set_client(trait_obj);
 
         test();
         drop(guard);
     }
 
     #[test]
-    fn manage_tmux_session_reattaches_existing_session() {
-        let mock = Arc::new(MockTmuxClient::new(true).with_session("session-a"));
-        with_mock_tmux(mock.clone(), || {
-            let started = manage_tmux_session(
-                true,
-                false,
-                Path::new("/tmp/worktree"),
-                "session-a",
-            )
-            .unwrap();
+    fn manage_multiplexer_session_reattaches_existing_zellij_session() {
+        let mock = Arc::new(
+            MockMultiplexerClient::new(&[Backend::Zellij])
+                .with_session(Backend::Zellij, "session-a"),
+        );
+        with_mock_multiplexer(mock.clone(), || {
+            let started =
+                manage_multiplexer_session(true, None, Path::new("/tmp/worktree"), "session-a")
+                    .unwrap();
             assert!(started);
         });
-        assert_eq!(mock.created_sessions(), Vec::<String>::new());
-        assert_eq!(mock.attached_sessions(), vec!["session-a".to_string()]);
+        assert_eq!(mock.created_sessions(), Vec::<(Backend, String)>::new());
+        assert_eq!(
+            mock.attached_sessions(),
+            vec![(Backend::Zellij, "session-a".to_string())]
+        );
     }
 
     #[test]
-    fn manage_tmux_session_creates_new_session_when_missing() {
-        let mock = Arc::new(MockTmuxClient::new(true));
-        with_mock_tmux(mock.clone(), || {
-            let started = manage_tmux_session(
-                true,
-                false,
-                Path::new("/tmp/worktree"),
-                "session-b",
-            )
-            .unwrap();
+    fn manage_multiplexer_session_falls_back_to_tmux_when_zellij_is_unavailable() {
+        let mock = Arc::new(MockMultiplexerClient::new(&[Backend::Tmux]));
+        with_mock_multiplexer(mock.clone(), || {
+            let started =
+                manage_multiplexer_session(true, None, Path::new("/tmp/worktree"), "session-b")
+                    .unwrap();
             assert!(started);
         });
-        assert_eq!(mock.created_sessions(), vec!["session-b".to_string()]);
-        assert_eq!(mock.attached_sessions(), vec!["session-b".to_string()]);
+        assert_eq!(
+            mock.created_sessions(),
+            vec![(Backend::Tmux, "session-b".to_string())]
+        );
+        assert_eq!(
+            mock.attached_sessions(),
+            vec![(Backend::Tmux, "session-b".to_string())]
+        );
     }
 
     #[test]
-    fn manage_tmux_session_skips_when_unavailable() {
-        let mock = Arc::new(MockTmuxClient::new(false));
-        with_mock_tmux(mock.clone(), || {
-            let started = manage_tmux_session(
+    fn manage_multiplexer_session_skips_when_unavailable() {
+        let mock = Arc::new(MockMultiplexerClient::new(&[]));
+        with_mock_multiplexer(mock.clone(), || {
+            let started =
+                manage_multiplexer_session(true, None, Path::new("/tmp/worktree"), "session-c")
+                    .unwrap();
+            assert!(!started);
+        });
+        assert!(mock.created_sessions().is_empty());
+        assert!(mock.attached_sessions().is_empty());
+    }
+
+    #[test]
+    fn manage_multiplexer_session_skips_when_already_inside_multiplexer() {
+        let mock = Arc::new(MockMultiplexerClient::new(&[
+            Backend::Zellij,
+            Backend::Tmux,
+        ]));
+        with_mock_multiplexer(mock.clone(), || {
+            let started = manage_multiplexer_session(
                 true,
-                false,
+                Some(Backend::Zellij),
                 Path::new("/tmp/worktree"),
-                "session-c",
+                "session-d",
             )
             .unwrap();
             assert!(!started);

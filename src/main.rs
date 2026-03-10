@@ -37,8 +37,12 @@ enum Commands {
         )]
         no_shell: bool,
 
-        #[arg(long, help = "Disable tmux session management when starting a shell")]
-        no_tmux: bool,
+        #[arg(
+            long,
+            alias = "no-tmux",
+            help = "Disable terminal multiplexer session management when starting a shell"
+        )]
+        no_mux: bool,
 
         #[arg(
             long,
@@ -80,13 +84,13 @@ fn main() -> Result<()> {
             branch_name,
             shell,
             no_shell,
-            no_tmux,
+            no_mux,
             print_path,
         } => {
             let start_shell = shell;
             let print_path = print_path || (!shell && !no_shell);
             output::set_machine_output(print_path);
-            setup::execute(&branch_name, start_shell, !no_tmux, print_path)?;
+            setup::execute(&branch_name, start_shell, !no_mux, print_path)?;
         }
         Commands::Cleanup {
             merged,
