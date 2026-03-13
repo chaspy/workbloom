@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-03-10
+
+### Added
+- `workbloom setup --shell` が Zellij セッションの自動生成・再接続に対応し、Zellij を優先して利用できるようにしました
+- `--no-mux` フラグを追加し、Zellij/tmux の自動起動をまとめて無効化できるようにしました（`--no-tmux` は互換 alias として維持）
+
+### Changed
+- `workbloom setup --shell` の既定セッション管理を tmux 優先から Zellij 優先へ変更し、Zellij がない場合のみ tmux へフォールバックするようにしました
+- `cleanup` が worktree 削除時に対応する Zellij セッションも終了し、既存の tmux/legacy tmux セッション cleanup と併せて整理できるようにしました
+
 ## [0.8.0] - 2026-01-03
 
 ## [0.8.1] - 2026-01-04
