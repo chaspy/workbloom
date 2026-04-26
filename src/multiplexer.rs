@@ -91,19 +91,27 @@ impl MultiplexerClient for RealMultiplexerClient {
     fn create_session(&self, backend: Backend, session_name: &str, directory: &Path) -> Result<()> {
         match backend {
             Backend::Zellij => {
-                let status = Command::new("zellij")
+                Command::new("zellij")
                     .args(["attach", "--create-background", session_name])
                     .current_dir(directory)
+                    .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
-                    .status()
+                    .spawn()
                     .with_context(|| format!("Failed to create zellij session '{session_name}'"))?;
 
-                if status.success() {
-                    Ok(())
-                } else {
-                    bail!("zellij failed to create session")
+                // Poll until the session appears (up to 3 seconds)
+                for _ in 0..15 {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    if zellij_sessions()
+                        .unwrap_or_default()
+                        .iter()
+                        .any(|n| n == session_name)
+                    {
+                        return Ok(());
+                    }
                 }
+                bail!("zellij session '{session_name}' was not created within timeout")
             }
             Backend::Tmux => {
                 let status = Command::new("tmux")
